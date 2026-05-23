@@ -1,6 +1,6 @@
 ---
 name: daily-check-report
-description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, dotnet/aspire) and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The skill reads timestamp.md (or falls back to 24h), gathers GitHub PR/Issue diffs and Azure RSS items since that time, writes the report in Japanese to report-yyyy-MM-dd-HH-mm-ss.md following report-template.md, and updates timestamp.md on success."
+description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, dotnet/aspire) and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The skill reads timestamp.md (or falls back to 24h), gathers GitHub PR/Issue diffs and Azure RSS items since that time, writes the report in Japanese to report-yyyy-MM-dd-HH-mm-ss.md following report-template.md, updates timestamp.md on success, and commits & pushes the generated report together with the updated timestamp.md."
 ---
 
 # Daily Check レポート生成 Skill
@@ -18,10 +18,11 @@ description: "Generate a daily/periodic diff report for a fixed set of GitHub re
 
 ## 出力物 (Deliverables)
 
-成功時に必ず以下 2 つを実施する:
+成功時に必ず以下 3 つを実施する:
 
 1. リポジトリルートに `report-yyyy-MM-dd-HH-mm-ss.md` を新規作成
 2. リポジトリルートの `timestamp.md` を今回の実行時刻 (UTC, `yyyy-MM-dd HH:mm:ss`) で上書き
+3. 上記 2 ファイルをまとめて commit し、現在のブランチに push (詳細は 5.2 節)
 
 **レポート本文の書式 (見出し階層・表のスキーマ・各リポジトリの書き方)** は本 Skill にバンドルされた
 [`references/report-template.md`](./references/report-template.md) を正本とする。本ファイルは「いつ・どうやって作るか」のみを定義する。
@@ -37,6 +38,7 @@ flowchart TD
     D --> E
     E --> F[6. report-yyyy-MM-dd-HH-mm-ss.md を保存]
     F --> G[7. timestamp.md を NOW で上書き]
+    G --> H[8. レポートと timestamp.md を commit & push]
 ```
 
 - すべての時刻は **UTC** で扱う (表示用に JST を併記する場合のみ変換)。
@@ -193,9 +195,15 @@ report-yyyy-MM-dd-HH-mm-ss.md
 
 ---
 
-## 5. 完了処理: `timestamp.md` の更新
+## 5. 完了処理: `timestamp.md` の更新と commit/push
 
-レポート保存後、`timestamp.md` を **今回の `REPORT_GENERATED_AT_UTC`** で上書きする。書式は `yyyy-MM-dd HH:mm:ss` (UTC)。
+レポートの保存が完了したら、`timestamp.md` を **今回の `REPORT_GENERATED_AT_UTC`** で上書きしたうえで、生成した `report-yyyy-MM-dd-HH-mm-ss.md` と更新後の `timestamp.md` を一括で commit & push する。
+
+> ⚠ **失敗時のルール**: レポート生成が途中で失敗した場合 (GitHub / RSS 取得エラー、テンプレート埋め込み失敗、レポートファイル保存失敗など) は、`timestamp.md` を **更新しない** だけでなく、**commit も push も行わない**。次回実行で同じ期間を再度拾えるようにするため、作業途中の中間ファイルが残っていれば `git restore` / `git clean` で破棄してから終了する。
+
+### 5.1 `timestamp.md` の更新
+
+書式は `yyyy-MM-dd HH:mm:ss` (UTC)。
 
 PowerShell:
 
@@ -210,7 +218,48 @@ bash:
 date -u +"%Y-%m-%d %H:%M:%S" > timestamp.md
 ```
 
-> ⚠ レポート生成が途中で失敗した場合は `timestamp.md` を **更新しない**。次回実行で同じ期間を再度拾えるようにするため。
+### 5.2 commit と push
+
+`timestamp.md` の更新が成功した直後に、生成済みのレポートファイルと `timestamp.md` をまとめて commit し、現在のブランチへ push する。
+
+コミットメッセージは以下のフォーマットを使う (時刻は `REPORT_GENERATED_AT_UTC` を `yyyy-MM-dd HH:mm:ss UTC` で表記):
+
+```
+Daily check report: yyyy-MM-dd HH:mm:ss UTC
+```
+
+例:
+
+```
+Daily check report: 2026-05-23 04:57:34 UTC
+```
+
+PowerShell:
+
+```powershell
+$reportFile = "report-$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd-HH-mm-ss')).md"
+$commitMessage = "Daily check report: $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
+git add $reportFile timestamp.md
+git commit -m $commitMessage
+git push
+```
+
+bash:
+
+```bash
+REPORT_FILE="report-$(date -u +'%Y-%m-%d-%H-%M-%S').md"
+COMMIT_MESSAGE="Daily check report: $(date -u +'%Y-%m-%d %H:%M:%S') UTC"
+git add "$REPORT_FILE" timestamp.md
+git commit -m "$COMMIT_MESSAGE"
+git push
+```
+
+注意:
+
+- 上の例では実行のたびに `date` / `Get-Date` を呼んでいるが、実際には Skill の冒頭で確定した `REPORT_GENERATED_AT_UTC` を使い回し、ファイル名・`timestamp.md` の中身・コミットメッセージで **同一の時刻** になるようにする。
+- `git add` 対象は **今回生成したレポートファイルと `timestamp.md` の 2 つだけ** に限定する (`git add .` などで他の変更を巻き込まない)。
+- push 先のブランチは現在チェックアウトされているブランチをそのまま使う (Skill 側で勝手にブランチを切り替えない)。
+- push が失敗した場合 (権限不足・リモート未設定など) は、ユーザーに状況を報告して手動対応を促す。`timestamp.md` を巻き戻す必要はない (ローカルの commit は残しておく)。
 
 ---
 
@@ -224,6 +273,7 @@ date -u +"%Y-%m-%d %H:%M:%S" > timestamp.md
 - [ ] 「次回チェックに向けたメモ」が埋まっている
 - [ ] 残ったプレースホルダ (`{{...}}`) が無い
 - [ ] `timestamp.md` を `REPORT_GENERATED_AT_UTC` で上書きした
+- [ ] レポートと `timestamp.md` を commit して push した (コミットメッセージ: `Daily check report: yyyy-MM-dd HH:mm:ss UTC`)
 
 ---
 
