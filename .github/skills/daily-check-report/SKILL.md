@@ -1,6 +1,6 @@
 ---
 name: daily-check-report
-description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, dotnet/aspire) and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The skill reads timestamp.md (or falls back to 24h), gathers GitHub PR/Issue diffs and Azure RSS items since that time, writes the report in Japanese to reports/{yyyy}/{MM}/report-yyyy-MM-dd-HH-mm-ss.md following report-template.md, updates timestamp.md on success, and commits & pushes the generated report together with the updated timestamp.md."
+description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire) and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The skill reads timestamp.md (or falls back to 24h), reads only the tail (continuous-watch section) of the most recent report under reports/{yyyy}/{MM}/ for token-efficient continuity, gathers GitHub PR/Issue diffs and Azure RSS items since that time, writes the report in Japanese to reports/{yyyy}/{MM}/report-yyyy-MM-dd-HH-mm-ss.md following report-template.md, updates timestamp.md on success, and commits & pushes the generated report together with the updated timestamp.md."
 ---
 
 # Daily Check レポート生成 Skill
@@ -32,8 +32,9 @@ description: "Generate a daily/periodic diff report for a fixed set of GitHub re
 ```mermaid
 flowchart TD
     A[1. timestamp.md 読込] --> B[2. 実行時刻 NOW を UTC で確定]
-    B --> C[3. GitHub 差分収集]
-    B --> D[4. Azure RSS 差分収集]
+    B --> B2["2.5. 直近レポート末尾の継続ウォッチ参照 (任意)"]
+    B2 --> C[3. GitHub 差分収集]
+    B2 --> D[4. Azure RSS 差分収集]
     C --> E[5. report-template.md をベースに執筆]
     D --> E
     E --> F[6. reports/yyyy/MM/report-yyyy-MM-dd-HH-mm-ss.md を保存]
@@ -58,6 +59,68 @@ flowchart TD
 3. `NOW` (実行時刻 UTC) を `REPORT_GENERATED_AT_UTC` としてレポート全体で使い回す。
 
 対象期間は半開区間 `PREVIOUS_CHECK_AT_UTC < x <= REPORT_GENERATED_AT_UTC` とする。
+
+---
+
+## 1.5. 直近レポート末尾の継続ウォッチ参照 (推奨)
+
+前回までのレポートに残した「継続ウォッチ中の PR / Issue」「Azure で次の段階を待っているアイテム」「次回チェックで重点的に確認したいこと」を今回の優先確認リストに引き継ぐためのステップ。**ただしレポート全文を読むのは禁止 — トークンを浪費する。末尾の `## 4. 次回チェックに向けたメモ` 以降だけを読み込む。**
+
+### 1.5.1 対象ファイルの特定
+
+1. `reports/` 配下に既存ファイルが **存在しない** 場合は本ステップをスキップして 2 節に進む (初回実行扱い)。
+2. `reports/{yyyy}/{MM}/report-*.md` をファイル名昇順で並べたときの **最後の 1 件** を対象とする。年月フォルダが今月分まだ無い場合は、直前月 `reports/{yyyy}/{MM-1}/` の最終ファイルを対象にする。
+
+PowerShell:
+
+```powershell
+$latest = Get-ChildItem -Path reports -Recurse -Filter "report-*.md" |
+  Sort-Object Name -Descending | Select-Object -First 1
+```
+
+bash:
+
+```bash
+LATEST=$(ls -1 reports/*/*/report-*.md 2>/dev/null | sort | tail -n 1)
+```
+
+### 1.5.2 末尾セクションだけを読み込む手順 (トークン節約)
+
+レポートは 30〜50 KB / 500 行規模になり得るため、**ファイル全体を読み込んではいけない**。以下のいずれかで `## 4. 次回チェック…` セクション以降だけを取得する:
+
+1. **grep でアンカー行を特定 → `view_range` で末尾だけ読む** (最も精密):
+
+   ```text
+   # 1) grep で開始行を取得
+   grep -n '^## 4\. 次回チェック' reports/2026/05/report-*.md
+   # → file:LINE: ## 4. 次回チェックに向けたメモ / ウォッチ対象
+
+   # 2) view ツールで view_range:[LINE, -1] を指定して末尾だけ読む
+   ```
+
+2. **grep の `-A` で直接末尾を抽出** (中間 `view` 不要):
+
+   ```bash
+   grep -n -A 200 '^## 4\. 次回チェック' "$LATEST"
+   ```
+
+   `-A 200` は安全側のマージン。出力末尾が ` ```yaml ` ブロックや EOF に到達していれば十分。
+
+3. PowerShell の `Get-Content -Tail 80` は **アンカー行を意識しない** ので原則使わない (テンプレ更新で末尾構造が変わったときに壊れる)。
+
+### 1.5.3 読み込んだ内容の使い方
+
+- 「継続ウォッチ中の PR / Issue」の各番号は、今回の対象期間で **新たな進展があったか** を最優先で確認する (マージされた / クローズされた / 関連 PR が出た等)。
+- 「Azure で次の段階を待っているアイテム」は、今回の Azure RSS 取得結果で **次ステージ (Preview→GA、Launched、Retired) に進んだか** を照合する。
+- 「次回チェックで重点的に確認したいこと」は、今回のレポートでも触れるかどうかの判断材料にする。
+
+### 1.5.4 引き継ぎとレポート本文
+
+- 進展があった項目は今回のレポート本文 (該当リポジトリの「主要な変更点」または agent-framework の詳細セクション) で言及する。
+- 進展が無くまだ追跡継続するものは、今回のレポートの「## 4. 次回チェックに向けたメモ」にも再度書く (引き継ぎが切れないように)。
+- 既に解決済み / クローズ済みで追跡不要になった項目は再掲しない。
+
+> ⚠ **絶対ルール**: 直近レポートの本文 (詳細 PR セクションやテーブル) は読み込まない。`## 4. 次回チェック…` 以降だけで十分であり、本文を読むとコンテキスト消費がレポート 1 本ぶん丸ごと増える。
 
 ---
 
@@ -295,6 +358,7 @@ git push
 ## 6. 完了前チェックリスト
 
 - [ ] `PREVIOUS_CHECK_AT_UTC` と `REPORT_GENERATED_AT_UTC` がレポート冒頭に正しく入っている
+- [ ] 直近レポートが存在する場合、その末尾 (`## 4. 次回チェック…` 以降のみ) を `grep` + `view_range` で読み、継続ウォッチ項目を今回確認した (本文は読まないこと)
 - [ ] Azure 更新セクションがレポートの **先頭グループ** (セクション 2) にある
 - [ ] `microsoft/agent-framework` セクションに **コミットレベルの詳細** が書かれている (変更ファイル一覧 / API 変化 / 破壊的変更の明示)
 - [ ] その他 5 リポジトリは **サマリー + リンク表** で完結している
@@ -311,4 +375,4 @@ git push
 
 - `./references/report-template.md` — レポート本文の書式テンプレート (正本)。Skill 実行時に **読み込み専用** で参照する。
 - リポジトリルートの `timestamp.md` — 前回チェック時刻の保存先 (実行時に作成・更新、ルートのまま移動しない)
-- `reports/{yyyy}/{MM}/report-yyyy-MM-dd-HH-mm-ss.md` — Skill 実行の出力物 (年月フォルダは必要に応じて自動作成)
+- `reports/{yyyy}/{MM}/report-yyyy-MM-dd-HH-mm-ss.md` — Skill 実行の出力物 (年月フォルダは必要に応じて自動作成)。**直近 1 件は次回実行時に末尾セクションのみ読み込み参照する** (1.5 節)。
