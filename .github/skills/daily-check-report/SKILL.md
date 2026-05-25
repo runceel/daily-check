@@ -72,7 +72,7 @@ flowchart TD
 | `Azure/azure-functions-dotnet-worker`   | サマリー   | 3.3 |
 | `dotnet/extensions`                     | サマリー   | 3.4 |
 | `runceel/ReactiveProperty`              | サマリー   | 3.5 |
-| `dotnet/aspire`                         | サマリー   | 3.6 |
+| `microsoft/aspire`                         | サマリー   | 3.6 |
 
 ### 2.2 取得対象データ
 
