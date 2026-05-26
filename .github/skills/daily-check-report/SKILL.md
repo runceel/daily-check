@@ -31,10 +31,11 @@ description: "Generate a daily/periodic diff report for a fixed set of GitHub re
 
 ```mermaid
 flowchart TD
+    A0[0. .tmp/ を作業ディレクトリとして用意] --> A
     A[1. timestamp.md 読込] --> B[2. 実行時刻 NOW を UTC で確定]
     B --> B2["2.5. 直近レポート末尾の継続ウォッチ参照 (任意)"]
-    B2 --> C[3. GitHub 差分収集]
-    B2 --> D[4. Azure RSS 差分収集]
+    B2 --> C[3. GitHub 差分収集 → .tmp/*.json]
+    B2 --> D[4. Azure RSS 差分収集 → .tmp/azure-rss.xml]
     C --> E[5. report-template.md をベースに執筆]
     D --> E
     E --> F[6. reports/yyyy/MM/report-yyyy-MM-dd-HH-mm-ss.md を保存]
@@ -44,6 +45,31 @@ flowchart TD
 
 - すべての時刻は **UTC** で扱う (表示用に JST を併記する場合のみ変換)。
 - レポート本文・要約はすべて **日本語** で記述する。
+
+---
+
+## 0. 作業ディレクトリ (`.tmp/`) — 一時ファイルの取り扱い
+
+> ⚠ **絶対ルール**: レポート生成過程でディスクに書き出す中間成果物は、**例外なく `.tmp/` 配下** に置く。リポジトリのルートや `reports/` 配下、ホームディレクトリにバラまかない。
+
+対象となる「中間成果物」の例:
+
+- Azure Release Communications API から取得した **RSS XML** (例: `.tmp/azure-rss.xml`)
+- `gh search prs` / `gh search issues` で取得した **PR / Issue 一覧の JSON ダンプ** (例: `.tmp/microsoft_agent-framework-merged.json`)
+- `gh pr view --json files,additions,deletions,commits` などで取得した **PR ごとの詳細 JSON** (例: `.tmp/af-pr-6030.json`)
+- 後段の整形・絞り込み用に保存した一時 Markdown / テキスト
+
+ルール:
+
+1. スクリプトの冒頭で `.tmp/` が無ければ作成する:
+   - PowerShell: `New-Item -ItemType Directory -Force -Path .tmp | Out-Null`
+   - bash: `mkdir -p .tmp`
+2. **どんなファイル名にしてもよい** が、リポジトリ名の `/` は `_` に置換する等で衝突を避ける。例: `microsoft/agent-framework` → `.tmp/microsoft_agent-framework-merged.json`。
+3. `.tmp/` はリポジトリの `.gitignore` で除外済み。**`git add .tmp/...` は絶対に行わない**。コミットに含めるのは `reports/{yyyy}/{MM}/report-*.md` と `timestamp.md` の 2 ファイルだけ (5.2 節)。
+4. レポート保存・コミット完了後の **クリーンアップは不要**。`.tmp/` は次回実行で同じ場所が再利用される (古いファイルはそのまま上書きで問題ない)。
+5. **過去に `.tmp/` 外に作られてしまった残骸ファイル** (ルート直下の `azure-rss.xml` や `*-merged.json` など) を見つけた場合は、本 Skill のコミットに巻き込まないよう注意する (`git status` で untracked を確認してから `git add` する)。安全のため、見つけ次第 `.tmp/` に移すか削除する。
+
+> 💡 セッション固有の作業フォルダ (例: `~/.copilot/session-state/.../files/`) が利用可能な環境では、そちらを使ってもよい。ただし **リポジトリ内に書く場合は必ず `.tmp/`** とする (ルートを汚さない)。
 
 ---
 
@@ -148,29 +174,37 @@ LATEST=$(ls -1 reports/*/*/report-*.md 2>/dev/null | sort | tail -n 1)
 
 `{PREV}` は `yyyy-MM-ddTHH:mm:ssZ` 形式 (ISO 8601, UTC)。
 
+> 📝 `gh` の出力を **ファイルに保存する場合** は `.tmp/` 配下に書く (0 節)。`gh search prs` の有効フィールドは `closedAt` / `updatedAt` / `createdAt` 等で、**`mergedAt` フィールドは存在しない** ため `--json` には指定しない (フィルタ用の `--merged-at` フラグとは別物)。
+
 ```bash
-# マージ済み PR
+# マージ済み PR (出力例: .tmp/{OWNER}_{REPO}-merged.json)
 gh search prs --repo {OWNER}/{REPO} --merged-at ">={PREV}" \
-  --json number,title,author,mergedAt,url,labels,body --limit 100
+  --json number,title,author,closedAt,updatedAt,url,labels,body --limit 100 \
+  > .tmp/{OWNER}_{REPO}-merged.json
 
 # 新規 Issue
 gh search issues --repo {OWNER}/{REPO} --created ">={PREV}" \
-  --json number,title,author,createdAt,state,url,labels,body --limit 100
+  --json number,title,author,createdAt,state,url,labels,body --limit 100 \
+  > .tmp/{OWNER}_{REPO}-issue-new.json
 
 # クローズ Issue
 gh search issues --repo {OWNER}/{REPO} --closed ">={PREV}" \
-  --json number,title,closedAt,state,url --limit 100
+  --json number,title,closedAt,state,url --limit 100 \
+  > .tmp/{OWNER}_{REPO}-issue-closed.json
 ```
 
 REST/GraphQL を直接叩く場合は `gh api` または GraphQL の `updatedAt` でフィルタする。
 
 ### 2.4 詳細モード (microsoft/agent-framework)
 
-サマリー収集に加えて、PR 1 件ごとに以下を取得:
+サマリー収集に加えて、PR 1 件ごとに以下を取得 (出力ファイルは **`.tmp/` 配下**):
 
 ```bash
-gh pr view {NUM} --repo microsoft/agent-framework --json files,additions,deletions,commits
-gh api repos/microsoft/agent-framework/pulls/{NUM}/files --paginate
+gh pr view {NUM} --repo microsoft/agent-framework \
+  --json number,title,body,files,additions,deletions,commits,mergedAt,author \
+  > .tmp/af-pr-{NUM}.json
+gh api repos/microsoft/agent-framework/pulls/{NUM}/files --paginate \
+  > .tmp/af-pr-{NUM}-files.json
 ```
 
 執筆時に重視するポイント:
@@ -203,14 +237,18 @@ gh api repos/microsoft/agent-framework/pulls/{NUM}/files --paginate
 
 ### 3.1 取得コマンド例
 
+> 📝 出力先は **必ず `.tmp/` 配下** (0 節)。
+
 ```bash
-curl -sSL "https://www.microsoft.com/releasecommunications/api/v2/azure/rss" -o azure-rss.xml
+mkdir -p .tmp
+curl -sSL "https://www.microsoft.com/releasecommunications/api/v2/azure/rss" -o .tmp/azure-rss.xml
 ```
 
 PowerShell:
 
 ```powershell
-Invoke-RestMethod "https://www.microsoft.com/releasecommunications/api/v2/azure/rss" -OutFile azure-rss.xml
+New-Item -ItemType Directory -Force -Path .tmp | Out-Null
+Invoke-RestMethod "https://www.microsoft.com/releasecommunications/api/v2/azure/rss" -OutFile .tmp/azure-rss.xml
 ```
 
 ### 3.2 カテゴリ判定
@@ -349,7 +387,7 @@ git push
 注意:
 
 - 上の例では実行のたびに `date` / `Get-Date` を呼んでいるが、実際には Skill の冒頭で確定した `REPORT_GENERATED_AT_UTC` を使い回し、年月フォルダのパス・ファイル名・`timestamp.md` の中身・コミットメッセージで **同一の時刻** になるようにする。
-- `git add` 対象は **今回生成した `reports/{yyyy}/{MM}/report-*.md` と `timestamp.md` の 2 ファイルだけ** に限定する (`git add .` や `git add reports/` などで他の変更を巻き込まない)。
+- `git add` 対象は **今回生成した `reports/{yyyy}/{MM}/report-*.md` と `timestamp.md` の 2 ファイルだけ** に限定する (`git add .` や `git add reports/` などで他の変更を巻き込まない)。`.tmp/` は `.gitignore` で除外済みなので追跡対象外 (0 節)。
 - push 先のブランチは現在チェックアウトされているブランチをそのまま使う (Skill 側で勝手にブランチを切り替えない)。
 - push が失敗した場合 (権限不足・リモート未設定など) は、ユーザーに状況を報告して手動対応を促す。`timestamp.md` を巻き戻す必要はない (ローカルの commit は残しておく)。
 
@@ -357,6 +395,7 @@ git push
 
 ## 6. 完了前チェックリスト
 
+- [ ] **中間成果物 (RSS XML / `gh` の JSON ダンプ等) はすべて `.tmp/` 配下に書いている** (0 節)。ルートや `reports/` 配下、ホームディレクトリに残骸を作っていない。
 - [ ] `PREVIOUS_CHECK_AT_UTC` と `REPORT_GENERATED_AT_UTC` がレポート冒頭に正しく入っている
 - [ ] 直近レポートが存在する場合、その末尾 (`## 4. 次回チェック…` 以降のみ) を `grep` + `view_range` で読み、継続ウォッチ項目を今回確認した (本文は読まないこと)
 - [ ] Azure 更新セクションがレポートの **先頭グループ** (セクション 2) にある
@@ -376,3 +415,5 @@ git push
 - `./references/report-template.md` — レポート本文の書式テンプレート (正本)。Skill 実行時に **読み込み専用** で参照する。
 - リポジトリルートの `timestamp.md` — 前回チェック時刻の保存先 (実行時に作成・更新、ルートのまま移動しない)
 - `reports/{yyyy}/{MM}/report-yyyy-MM-dd-HH-mm-ss.md` — Skill 実行の出力物 (年月フォルダは必要に応じて自動作成)。**直近 1 件は次回実行時に末尾セクションのみ読み込み参照する** (1.5 節)。
+- リポジトリルートの `.tmp/` — Skill 実行時の一時ファイル置き場 (RSS XML / `gh` の JSON ダンプ等)。`.gitignore` で除外済みでコミット対象外。詳細は 0 節を参照。
+- リポジトリルートの `.gitignore` — 最低でも `.tmp/` を除外していること。Skill 実行前にこの行が無ければ追加する。
