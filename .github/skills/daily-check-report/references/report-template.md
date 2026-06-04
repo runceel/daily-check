@@ -8,10 +8,12 @@
 「いつ・どうやって作るか」は ../SKILL.md が正本です。
 
 使い方:
-  - 本ファイルの構造に従い、`reports/yyyy/MM/` 配下に
-    `report-yyyy-MM-dd-HH-mm-ss.md` を新規作成してください。
-    (`yyyy` / `MM` は `REPORT_GENERATED_AT_UTC` の UTC 年・月、`MM` は
-    ゼロパディング 2 桁。年月フォルダが無い場合は作成してから書き込みます。
+  - 本ファイルの構造に従い、`reports/yyyy/MM/dd/` 配下に
+    `index.md` と分割ユニット (`azure.md`, `github-changelog.md`,
+    `agent-framework.md`, `aspnetcore.md`, `azure-functions-dotnet-worker.md`,
+    `extensions.md`, `reactiveproperty.md`, `aspire.md`) を作成してください。
+    (`yyyy` / `MM` / `dd` は `REPORT_GENERATED_AT_UTC` の UTC 年・月・日、
+    `MM` / `dd` はゼロパディング 2 桁。対象フォルダが無い場合は作成してから書き込みます。
     本ファイル自体は移動・改変しないでください。)
   - `{{...}}` のプレースホルダおよび本文中の「HINT」コメント
     (HTML コメント形式) の指示に従って各セクションを埋めてください。
@@ -23,14 +25,15 @@
   1. ヘッダ
   2. エグゼクティブサマリー
   3. Azure 更新                      ← レポートの先頭グループ
-  4. GitHub リポジトリ別 差分
-     4.1 microsoft/agent-framework  ← 詳細モード (コミット単位まで踏み込む)
-     4.2 dotnet/aspnetcore          ← サマリーモード
-     4.3 Azure/azure-functions-dotnet-worker
-     4.4 dotnet/extensions
-     4.5 runceel/ReactiveProperty
-     4.6 dotnet/aspire
-  5. 次回チェックに向けたメモ / ウォッチ対象
+  4. GitHub Changelog
+  5. GitHub リポジトリ別 差分
+     5.1 microsoft/agent-framework  ← 詳細モード (コミット単位まで踏み込む)
+     5.2 dotnet/aspnetcore          ← サマリーモード
+     5.3 Azure/azure-functions-dotnet-worker
+     5.4 dotnet/extensions
+     5.5 runceel/ReactiveProperty
+     5.6 dotnet/aspire
+  6. 次回チェックに向けたメモ / ウォッチ対象
 ============================================================
 -->
 
@@ -166,9 +169,26 @@ HINT: 上記カテゴリに該当しないアップデート (Feature update, Se
 
 ---
 
-## 3. GitHub リポジトリ別 差分
+## 4. GitHub Changelog
 
-### 3.1 microsoft/agent-framework  *(詳細モード)*
+<!--
+HINT:
+- GitHub の changelog RSS を拾い、主要なリリースノートや機能追加を
+  日本語で要約します。
+- 直近の更新が多い場合は、重要度順に 5〜10 項目に絞って表や箇条書きで整理します。
+-->
+
+### 最新の更新
+
+- {{GITHUB_CHANGELOG_ITEM_1}}
+- {{GITHUB_CHANGELOG_ITEM_2}}
+- {{GITHUB_CHANGELOG_ITEM_3}}
+
+---
+
+## 5. GitHub リポジトリ別 差分
+
+### 5.1 microsoft/agent-framework  *(詳細モード)*
 
 <!--
 HINT (詳細モード):
@@ -281,7 +301,7 @@ HINT:
 
 ---
 
-### 3.2 dotnet/aspnetcore  *(サマリーモード)*
+### 5.2 dotnet/aspnetcore  *(サマリーモード)*
 
 <!--
 HINT (サマリーモード共通):
@@ -316,7 +336,7 @@ HINT (サマリーモード共通):
 
 ---
 
-### 3.3 Azure/azure-functions-dotnet-worker  *(サマリーモード)*
+### 5.3 Azure/azure-functions-dotnet-worker  *(サマリーモード)*
 
 #### 統計サマリー
 
@@ -343,7 +363,7 @@ HINT (サマリーモード共通):
 
 ---
 
-### 3.4 dotnet/extensions  *(サマリーモード)*
+### 5.4 dotnet/extensions  *(サマリーモード)*
 
 #### 統計サマリー
 
@@ -370,7 +390,7 @@ HINT (サマリーモード共通):
 
 ---
 
-### 3.5 runceel/ReactiveProperty  *(サマリーモード)*
+### 5.5 runceel/ReactiveProperty  *(サマリーモード)*
 
 #### 統計サマリー
 
@@ -397,7 +417,7 @@ HINT (サマリーモード共通):
 
 ---
 
-### 3.6 dotnet/aspire  *(サマリーモード)*
+### 5.6 dotnet/aspire  *(サマリーモード)*
 
 #### 統計サマリー
 
@@ -424,7 +444,7 @@ HINT (サマリーモード共通):
 
 ---
 
-## 4. 次回チェックに向けたメモ / ウォッチ対象
+## 6. 次回チェックに向けたメモ / ウォッチ対象
 
 <!--
 HINT:
