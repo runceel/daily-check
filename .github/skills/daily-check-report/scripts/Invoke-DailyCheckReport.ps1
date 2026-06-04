@@ -204,7 +204,8 @@ try {
         @{ Path = (Join-Path $reportDir 'reactiveproperty.md'); Title = 'runceel/ReactiveProperty'; Body = $repoBody },
         @{ Path = (Join-Path $reportDir 'aspire.md'); Title = 'microsoft/aspire'; Body = $repoBody }
     ) | ForEach-Object {
-        Set-Content -LiteralPath $_.Path -Value @('# ' + $_.Title, '', $_.Body) -NoNewline
+        $content = @('# ' + $_.Title, '', $_.Body) -join [Environment]::NewLine
+        Set-Content -LiteralPath $_.Path -Value $content -NoNewline
     }
 
     if ($DryRun) {
