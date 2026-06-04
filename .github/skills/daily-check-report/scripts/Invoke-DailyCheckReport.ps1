@@ -57,7 +57,7 @@ function New-ReportUnit {
         [string]$Body
     )
 
-    Set-Content -LiteralPath $Path -Value @('# ' + $Title, '', $Body) -NoNewline
+    Set-Content -LiteralPath $Path -Value (@(('# ' + $Title), '', $Body) -join [Environment]::NewLine) -NoNewline
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')
@@ -92,14 +92,14 @@ try {
     $githubItems = @($githubChangelogXml.rss.channel.item | Select-Object -First 8)
 
     $indexBody = @(
-        '# 差分レポート — ' + $nowUtc.ToString('yyyy-MM-dd') + ' 版',
+        ('# 差分レポート — ' + $nowUtc.ToString('yyyy-MM-dd') + ' 版'),
         '',
         '| 項目 | 値 |',
         '| --- | --- |',
-        '| レポート生成日時 (UTC) | `' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |',
-        '| レポート生成日時 (JST) | `' + $nowUtc.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss') + '` |',
-        '| 前回チェック時刻 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |',
-        '| 対象期間 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |',
+        ('| レポート生成日時 (UTC) | `' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |'),
+        ('| レポート生成日時 (JST) | `' + $nowUtc.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss') + '` |'),
+        ('| 前回チェック時刻 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |'),
+        ('| 対象期間 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |'),
         '',
         'このディレクトリは日別の分割レポートを格納します。以下の単位ファイルを順に参照してください。',
         '',
@@ -121,9 +121,9 @@ try {
         '',
         '取得元: <https://www.microsoft.com/releasecommunications/api/v2/azure/rss>',
         '',
-        '対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss'),
+        ('対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss')),
         '',
-        'Azure RSS による新着項目は ' + $azureItems.Count + ' 件です。',
+        ('Azure RSS による新着項目は ' + $azureItems.Count + ' 件です。'),
         ''
     )
 
@@ -153,9 +153,9 @@ try {
         '',
         '取得元: <https://github.blog/changelog/feed/>',
         '',
-        '対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss'),
+        ('対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss')),
         '',
-        'GitHub Changelog フィードから ' + $githubItems.Count + ' 件を取り込みました。',
+        ('GitHub Changelog フィードから ' + $githubItems.Count + ' 件を取り込みました。'),
         ''
     )
 
@@ -204,7 +204,7 @@ try {
         @{ Path = (Join-Path $reportDir 'reactiveproperty.md'); Title = 'runceel/ReactiveProperty'; Body = $repoBody },
         @{ Path = (Join-Path $reportDir 'aspire.md'); Title = 'microsoft/aspire'; Body = $repoBody }
     ) | ForEach-Object {
-        $content = @('# ' + $_.Title, '', $_.Body) -join [Environment]::NewLine
+        $content = @(('# ' + $_.Title), '', $_.Body) -join [Environment]::NewLine
         Set-Content -LiteralPath $_.Path -Value $content -NoNewline
     }
 
