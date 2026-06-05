@@ -6,6 +6,7 @@ param(
     [switch]$SkipGitHub,
     [switch]$Finalize,
     [switch]$ValidateOnly,
+    [switch]$Status,
     [switch]$Force,
     [string]$GeneratedAtUtc
 )
@@ -758,16 +759,54 @@ try {
         'aspire.md'                         = '# microsoft/aspire'
     }
 
-    # -ValidateOnly は読み取り専用なので、当日ディレクトリが無ければ最新レポートへフォールバックする。
+    # -ValidateOnly / -Status は読み取り専用なので、当日ディレクトリが無ければ最新レポートへフォールバックする。
     # -Finalize は破壊的（timestamp 更新 + commit/push）なので、別日のレポートを誤って確定しないよう
     # フォールバックしない（当日 or 明示 -GeneratedAtUtc の日付のみを対象にする）。
-    if ($ValidateOnly) {
+    if ($ValidateOnly -or $Status) {
         if (-not (Test-Path -LiteralPath (Join-Path $reportDir 'index.md'))) {
             $latest = Get-LatestReportDir
             if ($latest) {
                 $reportDir = $latest
                 Write-Host ('[info] 当日のレポートが無いため最新レポートを対象にします: ' + $reportDir) -ForegroundColor Cyan
             }
+        }
+    }
+
+    # ===== -Status: 編集が必要か（残マーカーの有無）を読み取り専用で表示する。エラー扱いにしない =====
+    # 終了コード: 0 = すべて記入済み（確定可）/ 1 = 編集が必要 / 2 = レポート未生成
+    if ($Status) {
+        Write-Host ('Report status under ' + $reportDir + ' :')
+        if (-not (Test-Path -LiteralPath (Join-Path $reportDir 'index.md'))) {
+            Write-Host '  レポートが見つかりません。先に骨組みを生成してください（オプション無しで実行）。' -ForegroundColor Yellow
+            exit 2
+        }
+        $statusTotal = 0
+        $statusPending = New-Object System.Collections.Generic.List[string]
+        foreach ($f in $unitFileHeaders.Keys) {
+            $p = Join-Path $reportDir $f
+            if (-not (Test-Path -LiteralPath $p)) {
+                Write-Host ('  [欠落 ] ' + $f) -ForegroundColor Red
+                $statusPending.Add($f) | Out-Null
+                continue
+            }
+            $left = @(Get-LeftoverMarkers -Path $p)
+            if ($left.Count -gt 0) {
+                $statusTotal += $left.Count
+                $statusPending.Add($f) | Out-Null
+                Write-Host ('  [要編集] ' + $f + ' — 残り ' + $left.Count + ' 箇所') -ForegroundColor Yellow
+            } else {
+                Write-Host ('  [記入済] ' + $f) -ForegroundColor Green
+            }
+        }
+        Write-Host ''
+        if ($statusPending.Count -eq 0) {
+            Write-Host '結果: すべて記入済みです。編集は不要です。' -ForegroundColor Green
+            Write-Host ('次の手順:  pwsh ' + $PSCommandPath + ' -Finalize   （timestamp 更新 + commit/push）')
+            exit 0
+        } else {
+            Write-Host ('結果: 編集が必要です。' + $statusPending.Count + ' ファイル / 残り ' + $statusTotal + ' 箇所。') -ForegroundColor Yellow
+            Write-Host '各ファイルの <!-- TODO: ... --> を日本語解説に置き換えてから、再度 -Status で確認してください。'
+            exit 1
         }
     }
 
@@ -860,6 +899,12 @@ try {
     }
 
     # ===== 既定: 骨組み生成 (scaffold) — timestamp 更新・commit は行わない =====
+    if ($Force) {
+        Write-Host '============================================================' -ForegroundColor Red
+        Write-Host '[警告] -Force 指定: 記入済みファイルも上書きされ、手作業の記入が失われます。' -ForegroundColor Red
+        Write-Host '       通常の生成に -Force は不要です。意図的な再生成でなければ中止してください。' -ForegroundColor Red
+        Write-Host '============================================================' -ForegroundColor Red
+    }
     Write-Host 'Preparing temporary workspace...'
     New-Item -ItemType Directory -Force -Path '.tmp' | Out-Null
     New-Item -ItemType Directory -Force -Path '.tmp/gh' | Out-Null
