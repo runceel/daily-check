@@ -1,6 +1,6 @@
 # microsoft/aspire *(詳細モード)*
 
-対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:35:41 (UTC)
+対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:38:56 (UTC)
 
 ## 統計サマリー
 
@@ -19,15 +19,15 @@
 
 <!-- タイトル/ラベルからの自動判定です。誤検出はこの箇条書きごと削除可。各項目の影響を1行で補い、TODO コメントを消してください。 -->
 - **⚠ 破壊的変更** [#18003](https://github.com/microsoft/aspire/issues/18003) — Source Breaking Change - `networkID` --> `networkId` （Issue / open / afscrome）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  ネットワークプロパティ名が networkID から networkId にキャメルケース化されるため、既存コードで this property を直接参照しているすべてのアプリケーションを更新する必要があります。
 - **⚠ 破壊的変更** [#17924](https://github.com/microsoft/aspire/pull/17924) — Add proxyless endpoint port allocator （PR / open / danegsta）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  エンドポイントポート割り当てロジックが新しい proxyless allocator に変更されるため、カスタムポート割り当てロジックを実装しているアプリケーションの検証が必要です。
 - **非推奨/廃止** [#18022](https://github.com/microsoft/aspire/pull/18022) — Update specs/appmodel.md with AfterEndpointsAllocatedEvent deprecation （PR / merged / sliekens）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  AfterEndpointsAllocatedEvent が廃止予定となるため、この event に依存している既存アプリケーションは代替手段への移行計画を立案する必要があります。
 
 ## このリポジトリの要点
 
-<!-- TODO: このリポジトリ全体の要点を 2〜4 行で日本語要約。注目すべき PR/Issue に言及し、index 統合の素材にする。特筆すべき動きが無ければ「特筆なし」と明記。この行ごと置換すること -->
+本期間では AppModel API の変更（networkID → networkId、AfterEndpointsAllocatedEvent 廃止予定）とプロキシレス エンドポイントポート割り当ての新実装が進みました。UI 層では TextVisualizerDialog の JSON/XML 検出改善と、CLI の IdentityChannelReader を Try パターンに統一・ログ強化されました。テスト基盤では PersistentContainers のフレーキーテスト隔離も実施されています。
 
 ## 主要な PR (詳細)
 
@@ -42,7 +42,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+AppModel 仕様ドキュメント (specs/appmodel.md) を更新して、`AfterEndpointsAllocatedEvent` の廃止を明記しました。このイベントは以前から廃止予定でしたが、仕様ドキュメントには反映されていませんでした。マージによって公式な廃止状況がドキュメントに統一されます。
 
 <details><summary>変更ファイル (1 件)</summary>
 
@@ -60,11 +60,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+⚠ 破壊的変更: `AfterEndpointsAllocatedEvent` が公式に廃止予定 (deprecated) としてマークされました。このイベントに依存するコードは今後のリリースで削除されるため、代替手段への移行が必須です。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+AfterEndpointsAllocatedEvent を使用している既存アプリケーションは、仕様ドキュメントを確認して推奨される代替手段に切り替える必要があります。
 
 ### [#17997](https://github.com/microsoft/aspire/pull/17997) — Quarantine PersistentContainersPreserveDataAcrossAppHostRuns test
 
@@ -75,29 +75,24 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+PersistentContainersPreserveDataAcrossAppHostRuns テストが不安定 (flaky) のため、隔離 (quarantine) 属性を追加しました。このテストは時折失敗することが報告されていたため、CI に引っかかるまで隔離して、安定した実装を求めるための措置です。
 
 <details><summary>変更ファイル (1 件)</summary>
 
-| ファイル | +追加 | -削除 |
-| -------- | ----- | ----- |
-| `tests/Aspire.Cli.EndToEnd.Tests/PersistentContainerEndToEndTests.cs` | 2 | 0 |
+### [#17970](https://github.com/microsoft/aspire/pull/17970) — Disable markdown option when JSON or XML is detected in TextVisualizerDialog
 
-</details>
-
-<details><summary>コミット (1 件)</summary>
-
-- `c837677` Quarantine PersistentContainersPreserveDataAcrossAppHostRuns test
-
-</details>
+- 作者: Copilot / 状態: MERGED
+- ラベル: `area-dashboard`
+- 変更行数: +9 / -4
+- マージ日時 (UTC): `2026-06-08 09:47:07`
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+test に Quarantine 属性を追加しただけであり、API シグネチャ変更や破壊的変更はありません。内部的な test 実行ロジックへの影響のみです。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+マイグレーション不要です。このテストの隔離は Aspire 開発チームの CI/CD 安定化対策であり、ユーザーのアプリケーションには直接影響しません。
 
 ### [#17970](https://github.com/microsoft/aspire/pull/17970) — Disable markdown option when JSON or XML is detected in TextVisualizerDialog
 
@@ -108,7 +103,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+TextVisualizerDialog で JSON/XML 形式を自動検出した場合、markdown オプションを format selector から除外するよう改善しました。従来は常に markdown を有効にしていましたが、構造化データに対して markdown は不適切であるため、JSON/XML 検出時のみ markdown を disabled にします。未知の形式は markdown を有効にしてユーザーが切り替え可能にしました。
 
 <details><summary>変更ファイル (2 件)</summary>
 
@@ -129,11 +124,26 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+TextVisualizerDialog の `OnParametersSet` メソッドロジックが改善されました。markdown format は JSON/XML 未検出時のみ `EnabledOptions` に追加されるようになり、API シグネチャ変更はありません。内部実装の改善のみです。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+マイグレーション不要です。この改善により、テキスト可視化ダイアログで JSON/XML データを表示する場合に、不適切な markdown オプションが表示されなくなり、UX が向上します。
+
+### [#17828](https://github.com/microsoft/aspire/pull/17828) — Refactor IdentityChannelReader to Try pattern and log CLI channel at startup
+
+- 作者: JamesNK / 状態: MERGED
+- ラベル: `area-cli`
+- 変更行数: +112 / -83
+- マージ日時 (UTC): `2026-06-08 09:39:24`
+
+**コミットレベルの詳細 (API 変化・破壊的変更)**
+
+TextVisualizerDialog の `OnParametersSet` メソッドロジックが改善されました。markdown format は JSON/XML 未検出時のみ `EnabledOptions` に追加されるようになり、API シグネチャ変更はありません。内部実装の改善のみです。
+
+**既存利用者への影響**
+
+マイグレーション不要です。この改善により、テキスト可視化ダイアログで JSON/XML データを表示する場合に、不適切な markdown オプションが表示されなくなり、UX が向上します。
 
 ### [#17828](https://github.com/microsoft/aspire/pull/17828) — Refactor IdentityChannelReader to Try pattern and log CLI channel at startup
 
@@ -144,7 +154,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+IdentityChannelReader を Try パターンに統一し、`ReadChannel` を `TryReadChannel` に改名しました (bool 戻り値、out パラメータ対応)。CLI 起動時にパス・チャネル情報をログに出力するよう強化し、診断性が向上しました。Main で IdentityChannelReader を早期作成して DI 経由で再利用、InstallationDiscovery/AspireVersionCheck の呼び出しを try/catch から Try パターンに統一しました。
 
 <details><summary>変更ファイル (9 件)</summary>
 
@@ -170,11 +180,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+`IdentityChannelReader` のインターフェースが `ReadChannel` → `TryReadChannel` に変更されました。Try パターン (bool 戻り値 + out パラメータ) への統一は内部実装の改善で、外部 API への直接的な破壊的変更はありません。テスト用 FakeIdentityChannelReader も対応パターンに更新されました。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+マイグレーション不要です。この変更は Aspire CLI 内部の例外処理パターン統一であり、ユーザーのアプリケーションには直接影響しません。起動ログが強化されたため診断情報が充実します。
 
 ## その他の変更
 

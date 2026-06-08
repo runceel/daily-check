@@ -1,6 +1,6 @@
 # microsoft/agent-framework *(詳細モード)*
 
-対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:35:41 (UTC)
+対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:38:56 (UTC)
 
 ## 統計サマリー
 
@@ -11,21 +11,21 @@
 | クローズ (未マージ) PR  | 6 |
 | 新規 Issue              | 7 |
 | クローズ Issue          | 6 |
-| 主要コントリビューター  | westey-m, giles17, VedantSonani, moonbox3, peibekwe |
+| 主要コントリビューター  | westey-m, peibekwe, giles17, moonbox3, VedantSonani |
 
 ## ⚠ 重要な変更（要確認）
 
 <!-- タイトル/ラベルからの自動判定です。誤検出はこの箇条書きごと削除可。各項目の影響を1行で補い、TODO コメントを消してください。 -->
 - **⚠ 破壊的変更** [#6388](https://github.com/microsoft/agent-framework/pull/6388) — .NET: [BREAKING] Fix hosting bugs （PR / merged / westey-m）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  ホスティング層とセッション分離の実装でホスティング設定が変更となるため、既存の ClaimsIdentitySessionIsolationKeyProvider を使用しているアプリケーションは新しい ServiceCollectionExtensions API への移行が必要です。
 - **⚠ 破壊的変更** [#6381](https://github.com/microsoft/agent-framework/pull/6381) — .NET: [BREAKING] Migrate .NET GitHub Copilot SDK to v1.0.0 （PR / merged / giles17）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  GitHub.Copilot.SDK の v1.0.0 安定版への移行により名前空間・API が大幅に変更されるため、使用している全アプリケーション（特に PermissionDecision/SessionConfig の API）の更新が必須です。
 - **GA 昇格** [#6403](https://github.com/microsoft/agent-framework/pull/6403) — .NET: Upgrade GitHub.Copilot.SDK to 1.0.0 GA + preserve caller-supplied SessionConfig.SessionId （PR / open / chandramouleswaran）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  v1.0.0 GA のフィーチャー確認とセッション ID の保存ロジックの検証を行い、既存のセッション管理との互換性を確認する必要があります。
 
 ## このリポジトリの要点
 
-<!-- TODO: このリポジトリ全体の要点を 2〜4 行で日本語要約。注目すべき PR/Issue に言及し、index 統合の素材にする。特筆すべき動きが無ければ「特筆なし」と明記。この行ごと置換すること -->
+本期間では GitHub Copilot SDK の v1.0.0 安定版への移行（#6381）とホスティング層のバグ修正（#6388）という 2 つの重要な破壊的変更、および承認フロー・AG-UI メモリ実装の改善が進みました。特に Python の Mem0 統合（#6242）ではエンティティ分離とフィルタリング ロジックの根本的な修正が行われ、既存の空結果バグが解決されました。
 
 ## 主要な PR (詳細)
 
@@ -40,7 +40,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+ホスティング層での ClaimsIdentitySessionIsolationKeyProvider とセッション分離スコープの実装にバグがあったため、修正を行いました。特にメモリプロバイダーのスコープ管理とクレーム処理のロジックを改善し、セッション分離の安定性を向上させました。ServiceCollectionExtensions に新しい拡張メソッドを追加して、より簡潔な登録方式を提供します。
 
 <details><summary>変更ファイル (6 件)</summary>
 
@@ -65,11 +65,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+⚠ 破壊的変更: `ClaimsIdentitySessionIsolationKeyProviderOptions` の初期化シグネチャが変更されました。HostedFoundryMemoryProviderScopes の内部メソッド呼び出し方が変わり、セッション分離キー生成時の引数の意味が明確化されました。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+ホスティング設定で ClaimsIdentitySessionIsolationKeyProvider を直接使用しているアプリケーションは、ServiceCollectionExtensions の新しい拡張メソッド経由での登録に変更する必要があります。マージ前にセッション分離機能の動作確認をお願いします。
 
 ### [#6381](https://github.com/microsoft/agent-framework/pull/6381) — .NET: [BREAKING] Migrate .NET GitHub Copilot SDK to v1.0.0
 
@@ -80,9 +80,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
-
-<details><summary>変更ファイル (15 件)</summary>
+GitHub.Copilot.SDK を v1.0.0-beta.2 から v1.0.0 安定版へ移行しました。名前空間が `GitHub.Copilot.SDK` から `GitHub.Copilot`/`GitHub.Copilot.Rpc` へ変更され、`PermissionRequestResult` が `PermissionDecision`、`SessionConfig.ConfigDir` が `SessionConfig.ConfigDirectory` などの API 変更が伴います。タイプ変更（`double?` → `TimeSpan?` など）やイベント購読の `On<T>()` 形式への統一も実施されました。
 
 | ファイル | +追加 | -削除 |
 | -------- | ----- | ----- |
@@ -116,11 +114,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+⚠ 破壊的変更: 名前空間が `GitHub.Copilot.SDK` → `GitHub.Copilot` に統一、`PermissionRequestResult` → `PermissionDecision` へ変更、`SessionConfig.ConfigDir` → `ConfigDirectory` へリネーム、`ICollection<AIFunction>` → `ICollection<AIFunctionDeclaration>`、`double?` → `TimeSpan?`、イベント購読が `.On()` → `.On<SessionEvent>()` 形式に変更されました。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+GitHub Copilot 統合を利用しているアプリケーションは全て名前空間・型・メソッドシグネチャを更新する必要があります。特に Permission ハンドラと Session Config の処理が大きく変わるため、綿密なマイグレーション作業が必要です。
 
 ### [#6387](https://github.com/microsoft/agent-framework/pull/6387) — .NET: Add approval bypassing to harness as the default
 
@@ -131,9 +129,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
-
-<details><summary>変更ファイル (4 件)</summary>
+HarnessAgent に承認バイパス機能を追加しました。MEAI は状態を保持しないため、承認が必要なファンクション呼び出し（FCC）と不要な FCC が混在する場合、全て承認対象として返すという問題を解決します。これまでのホスト側の手動対応を不要にし、デフォルトで承認不要な FCC を自動的にハーネス内に保存する仕組みを導入しました。
 
 | ファイル | +追加 | -削除 |
 | -------- | ----- | ----- |
@@ -155,11 +151,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+`HarnessAgentOptions` に新しい設定プロパティが追加されました。承認バイパス機能はデフォルトで有効になりますが、オプトアウトも可能です。既存の HarnessAgent インスタンスは自動的に新しいデフォルト動作を使用しますが、破壊的な API 変更はありません。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+ハーネスを使用しているアプリケーションは基本的にマイグレーション不要です。承認バイパス機能が自動的に有効になり、より効率的に FCC を処理できるようになります。必要に応じてオプションで機能を無効化することも可能です。
 
 ### [#6376](https://github.com/microsoft/agent-framework/pull/6376) — Python: Match AG-UI approval responses to requested arguments
 
@@ -170,9 +166,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
-
-<details><summary>変更ファイル (6 件)</summary>
+AG-UI （Apple Genie UI）の承認応答マッチング機構を改善しました。AG-UI 承認画面でユーザーが承認した関数呼び出しが、実際に提示された関数名と引数と正確に一致するまで承認を受け付けないようにしました。引数が変わった場合は その承認応答を破棄し、ペンディング中の承認を保持して再試行可能にします。ワークフロー中断・再開時の承認にも同じマッチングロジックを適用しました。
 
 | ファイル | +追加 | -削除 |
 | -------- | ----- | ----- |
@@ -193,11 +187,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+内部の承認マッチング実装が強化されました。`_agent_run.py` と `_workflow_run.py` の承認検証ロジックが改善され、関数名と正規化された引数の完全一致が要件となります。API シグネチャの変更はなく、内部実装の改善のみです。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+既存の AG-UI 利用アプリケーションにマイグレーション不要です。この変更により、誤操作や引数の不一致による承認エラーが減少し、承認フローがより堅牢になります。
 
 ### [#6367](https://github.com/microsoft/agent-framework/pull/6367) — .NET: Fix single-column value unwrap in declarative workflow
 
@@ -208,7 +202,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
+宣言的ワークフロー（Declarative Workflow）の ForeachExecutor で Power Fx スカラー配列リテラルの処理を改善しました。Power Fx の `=[1, 2, 3]` は `Table({Value: 1}, {Value: 2}, {Value: 3})` にラップされるため、単一列 `{Value: ...}` の形状を検出して自動的にアンラップし、`Local.LoopValue` がユーザーが記述したスカラーとして読み込まれるようにしました。
 
 <details><summary>変更ファイル (2 件)</summary>
 
@@ -228,11 +222,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+`ForeachExecutor` の値アンラップロジック が強化されました。単一列テーブルの検出・アンラップは内部実装の改善で、API シグネチャの変更はありません。既存の `DataValueExtensions.ToObject` 規則と統一されました。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+宣言的ワークフローを使用するアプリケーションは基本的にマイグレーション不要です。この修正により、ループ内で配列リテラルを使用する場合のスカラー値の読み込みが正確に動作するようになります。
 
 ### [#6242](https://github.com/microsoft/agent-framework/pull/6242) — Python: fix(mem0): isolate entity retrieval and correct app_id payload
 
@@ -243,9 +237,7 @@
 
 **変更概要**
 
-<!-- TODO: 変更内容を 3〜6 行で日本語要約。何を解決する PR か / 主要な変更点 / 影響範囲 -->
-
-<details><summary>変更ファイル (2 件)</summary>
+Mem0ContextProvider の重大なバグを修正しました。before_run フェーズでメモリ検索が常に空結果を返していた問題の原因は 2 つ: (1) app_id を metadata 内に埋め込んでいたが、検索時に Mem0 の top-level app_id パラメータで探していた不一致、(2) user_id と agent_id を単一フィルタに含めると AND 結合で交差がなくなる問題。並列 asyncio.gather で User と Agent のエンティティパーティションを独立クエリして、結果をマージ・重複排除することで解決しました。
 
 | ファイル | +追加 | -削除 |
 | -------- | ----- | ----- |
@@ -270,11 +262,11 @@
 
 **コミットレベルの詳細 (API 変化・破壊的変更)**
 
-<!-- TODO: 上の変更ファイル / コミットから、API シグネチャ変更・破壊的変更・新規抽象などを抽出して日本語で説明。⚠ 破壊的変更があれば明示 -->
+`_context_provider.py` の after_run で app_id を Mem0 の native app_id パラメータに渡すよう変更、before_run で bundled filters を完全削除して asyncio.gather による並列クエリに置き換えました。`build_search_kwargs` ヘルパーで OSS AsyncMemory と Platform AsyncMemoryClient の両パターンに対応しています。破壊的変更はなく内部実装の修正です。
 
 **既存利用者への影響**
 
-<!-- TODO: マイグレーション要否を日本語で 1〜3 行 -->
+Mem0 統合を使用しているアプリケーションは基本的にマイグレーション不要です。この修正により、before_run フェーズでようやくメモリが正常に検索されるようになり、既存の空結果バグが解決されます。
 
 ## その他の変更
 

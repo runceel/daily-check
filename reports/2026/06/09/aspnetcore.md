@@ -1,6 +1,6 @@
 # dotnet/aspnetcore
 
-対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:35:41 (UTC)
+対象期間: 2026-06-08 01:26:03 〜 2026-06-08 23:38:56 (UTC)
 
 ## 統計サマリー
 
@@ -16,17 +16,20 @@
 
 <!-- タイトル/ラベルからの自動判定です。誤検出はこの箇条書きごと削除可。各項目の影響を1行で補い、TODO コメントを消してください。 -->
 - **⚠ 破壊的変更** [#67082](https://github.com/dotnet/aspnetcore/pull/67082) — [breaking] Razor Components: defer to upstream antiforgery / CSRF middleware （PR / open / DeagleGross）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  RazorComponents は CSRF ミドルウェアの結果を信頼するよう変更されるため、既存で UseAntiforgery() を明示的に呼び出しているアプリケーションの検証が必要です。また DisableCsrfProtection=true の場合の動作確認も推奨します。
 - **非推奨/廃止** [#67077](https://github.com/dotnet/aspnetcore/pull/67077) — Remove long-obsolete MVC APIs targeted for removal （PR / open / Copilot）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  複数リリース前から廃止予定だった MVC API（ImageTagHelper コンストラクタ、CompatibilityVersion など）が削除されるため、これらの API に依存している既存コードの削除またはリファクタリングが必要です。
 - **非推奨/廃止** [#66551](https://github.com/dotnet/aspnetcore/issues/66551) — Revise obsolete APIs intended to be removed, and consider removing in .NET 11 （Issue / open / Youssef1313）
-  <!-- TODO: 影響を1行（誰が何を確認・対応する必要があるか） -->
+  長期間廃止状態にあった複数の API（CompatibilityVersion、ModelMetadataIdentity オーバーロードなど）の削除が検討されており、.NET 11 での削除予定のため事前の対応・検証が望ましいです。
 
 ## 主要な変更点
 
-<!-- TODO: 上の「重要な変更」と下の一覧から、主要な変更点を 3〜8 行の箇条書きで日本語要約。重要項目があれば必ず含める -->
-
-- 
+- ⚠ **Razor Components の CSRF/Antiforgery 実装が破壊的に変更** — RazorComponents は従来の Antiforgery に依存した直接検証から、上流の CsrfProtectionMiddleware/AntiforgeryMiddleware の結果を信頼する仕様へ移行します。新規アプリはデフォルト CSRF ミドルウェアのみで保護されます。
+- ⚠ **MVC 長期廃止 API の削除** — CompatibilityVersion、ImageTagHelper 旧コンストラクタ、ModelMetadataIdentity 旧オーバーロードなど複数リリース前から廃止予定だった API が削除されます。
+- Union型サポートの拡張 — Minimal API、MVC/Razor Pages で union 型をエンドポイントパラメータや戻り値として利用可能に (#66951、#67005)。
+- OpenAPI 3.2.0 対応強化 — 追加操作の発行サポート、バインディングソース検証の改善など (#67007、#67076)。
+- Identity テンプレート/メール関連の改善 — ユーザーが実行しなかったアクション向けのデフォルトメール文言の改善 (#66747)。
+- コンポーネント・テスト基盤の刷新 — Virtualize 動作改善、Components.Testing を xUnit v3 から MSTest へ移行 (#67083)。
 
 ## 変化のあった PR / Issue
 
