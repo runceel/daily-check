@@ -1000,9 +1000,18 @@ try {
     }
 
     $previousCheckAtUtc = Get-PreviousCheckAtUtc -TimestampPath (Join-Path $repoRoot 'timestamp.md')
-    $year  = $nowUtc.ToString('yyyy')
-    $month = $nowUtc.ToString('MM')
-    $day   = $nowUtc.ToString('dd')
+
+    # レポートの「カレンダー日付」は JST (Asia/Tokyo) 基準にする。
+    # （RSS 絞り込み期間・timestamp.md・meta は $nowUtc のまま UTC を維持する。）
+    $jstZone = try {
+        [System.TimeZoneInfo]::FindSystemTimeZoneById('Asia/Tokyo')
+    } catch {
+        [System.TimeZoneInfo]::FindSystemTimeZoneById('Tokyo Standard Time')
+    }
+    $nowJst = [System.TimeZoneInfo]::ConvertTimeFromUtc($nowUtc, $jstZone)
+    $year  = $nowJst.ToString('yyyy')
+    $month = $nowJst.ToString('MM')
+    $day   = $nowJst.ToString('dd')
     $reportDir = Join-Path 'reports' (Join-Path $year (Join-Path $month $day))
 
     # 単位ファイルと先頭ヘッダの対応（構造検証・finalize 検証に共用）
@@ -1115,8 +1124,8 @@ try {
                 pendingCount = $work.Count
                 fingerprint  = $fingerprint
                 references   = @(
-                    '.github/skills/daily-check-report2/references/report-template.md',
-                    '.github/skills/daily-check-report2/references/quality-rules.md'
+                    '.github/skills/daily-check-report/references/report-template.md',
+                    '.github/skills/daily-check-report/references/quality-rules.md'
                 )
                 markers      = @($work | ForEach-Object {
                     [ordered]@{ line = $_.Line; heading = $_.Heading; kind = $_.Kind; text = $_.Text; acceptance = $_.Acceptance }
@@ -1431,12 +1440,12 @@ try {
 
     # ----- index.md（リポジトリ走査後に生成し、横断重要項目と meta を埋め込む） -----
     $indexLines = New-Object System.Collections.Generic.List[string]
-    $indexLines.Add('# 差分レポート — ' + $nowUtc.ToString('yyyy-MM-dd') + ' 版 (インデックス)') | Out-Null
+    $indexLines.Add('# 差分レポート — ' + $nowJst.ToString('yyyy-MM-dd') + ' 版 (インデックス)') | Out-Null
     $indexLines.Add('') | Out-Null
     $indexLines.Add('| 項目 | 値 |') | Out-Null
     $indexLines.Add('| --- | --- |') | Out-Null
     $indexLines.Add('| レポート生成日時 (UTC) | `' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |') | Out-Null
-    $indexLines.Add('| レポート生成日時 (JST) | `' + $nowUtc.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss') + '` |') | Out-Null
+    $indexLines.Add('| レポート生成日時 (JST) | `' + $nowJst.ToString('yyyy-MM-dd HH:mm:ss') + '` |') | Out-Null
     $indexLines.Add('| 前回チェック時刻 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |') | Out-Null
     $indexLines.Add('| 対象期間 (UTC) | `' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + '` |') | Out-Null
     $indexLines.Add('') | Out-Null
@@ -1500,7 +1509,7 @@ try {
 
     # ----- 構造検証（先頭行・エンコーディング） -----
     Write-Host 'Validating output files...'
-    $expectedDateMarker = $nowUtc.ToString('yyyy-MM-dd')
+    $expectedDateMarker = $nowJst.ToString('yyyy-MM-dd')
     foreach ($f in $unitFileHeaders.Keys) {
         $marker = if ($f -eq 'index.md') { $expectedDateMarker } else { '' }
         Test-OutputFile -Path (Join-Path $reportDir $f) -ExpectedHeaderPrefix $unitFileHeaders[$f] -RequiredMarker $marker

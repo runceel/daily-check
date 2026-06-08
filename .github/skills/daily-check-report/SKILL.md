@@ -1,20 +1,19 @@
 ---
 name: daily-check-report
-description: "Iterative-loop variant of the daily diff report generator for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire), GitHub Changelog RSS, and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. This variant adds a mechanical, file-by-file work loop (`-Next`) so the report can be filled in small, well-defined steps without dropping quality — useful when driving the workflow with a less capable model. Use this when the user asks for the loop/反復版 of the daily check, デイリーチェック（ループ版）, or daily-check-report by name. The skill delegates to .github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1, writes split day-folder reports under reports/{yyyy}/{MM}/{dd}/, and updates timestamp.md on success while optionally committing and pushing the result. (The non-loop original is `daily-check-report`; both write to the same reports/ + timestamp.md.)"
+description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire), GitHub Changelog RSS, and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The workflow runs as a mechanical, file-by-file loop (`-Next`) so the report can be filled in small, well-defined steps without dropping quality — robust even when driven by a less capable model. The skill delegates to .github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1, writes split day-folder reports under reports/{yyyy}/{MM}/{dd}/ (folder date is JST/Asia-Tokyo), and updates timestamp.md on success while optionally committing and pushing the result."
 ---
 
-# Daily Check レポート生成 Skill（反復ループ版 / daily-check-report）
+# Daily Check レポート生成 Skill
 
-このリポジトリ (`runceel/daily-check`) の主目的である「指定 GitHub リポジトリ群 + Azure 更新の前回チェックからの差分レポートを生成する」ワークフローを、**機械的なファイル単位の反復ループ**で進められるようにした版です。情報収集はスクリプトが決定的に行い、エージェント（人間・各種モデル）は `-Next` が提示する **1 ファイル分の作業** を受け入れ基準に従って埋めるだけで、品質を落とさずレポートを完成できます。
-
-> 非ループ版は `daily-check-report`。出力先（`reports/` と `timestamp.md`）は共通です。本スキルは「ループで回したい / 安価なモデルで回したい」ときに使ってください。
+このリポジトリ (`runceel/daily-check`) の主目的である「指定 GitHub リポジトリ群 + Azure 更新の前回チェックからの差分レポートを生成する」ワークフローを自動化する Skill です。情報収集はスクリプトが決定的に行い、エージェント（人間・各種モデル）は **機械的なファイル単位の反復ループ**（`-Next`）が提示する **1 ファイル分の作業** を受け入れ基準に従って埋めるだけで、品質を落とさずレポートを完成できます。
 
 ## いつ使うか
 
-- 「daily-check report をループ版で」「反復版でデイリーチェック」「daily-check-report で」
-- 「差分レポートを 1 ファイルずつ埋めていきたい」「機械的に回したい」
+ユーザーが次のような依頼をしたとき、本 Skill を起動してください:
 
-（単発・一括で作りたいだけなら `daily-check-report` でも構いません。）
+- 「差分レポートを作って」「daily check のレポートをお願い」「デイリーチェック実行して」
+- 「前回からの GitHub の変化と Azure の更新まとめて」
+- 「daily-check report を生成して」「差分レポートを 1 ファイルずつ埋めていきたい」
 
 ## 出力物
 
@@ -119,7 +118,7 @@ pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1 -Fi
 - `-SkipCommit` — `-Finalize` 時の commit をスキップ。
 - `-SkipPush` — `-Finalize` 時の push をスキップ。
 - `-SkipGitHub` — `gh` CLI 呼び出しを行わず、PR/Issue 表は警告のみで埋める（オフライン / レート制限回避用）。
-- `-GeneratedAtUtc "yyyy-MM-dd HH:mm:ss"` — 生成時刻（および対象日フォルダ）を固定する。
+- `-GeneratedAtUtc "yyyy-MM-dd HH:mm:ss"` — 生成時刻（UTC）を固定する。**レポートのフォルダ日付・タイトル日付は、この UTC 時刻を JST (Asia/Tokyo) へ変換したカレンダー日付**で決まる（RSS 絞り込み期間・`timestamp.md`・meta は UTC のまま）。当日フォルダを過ぎてから過去日のレポートを `-Finalize` する場合は、目的の JST 日付に対応する UTC をここで明示する（例: JST 6/9 のレポートなら `"2026-06-08 23:13:00"` のような UTC）。
 
 > `-Next` / `-Status` / `-ValidateOnly` / `-Finalize` は同時指定できない（いずれか一つ）。`-Next` / `-Status` / `-ValidateOnly` は当日レポートが無ければ最新レポートを対象にフォールバックする（`-Finalize` はしない）。
 

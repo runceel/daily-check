@@ -3,7 +3,7 @@
 レポート本文テンプレート / 書式リファレンス (report-template.md)
 ============================================================
 
-本ファイルは `daily-check-report2` Skill（反復ループ版）が **執筆フェーズ** に参照する書式の正本です。
+本ファイルは `daily-check-report` Skill（反復ループ版）が **執筆フェーズ** に参照する書式の正本です。
 
 重要な前提:
   スクリプト (`scripts/Invoke-DailyCheckReport.ps1`) が `reports/yyyy/MM/dd/`
