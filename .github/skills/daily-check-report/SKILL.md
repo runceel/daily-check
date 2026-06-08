@@ -1,9 +1,9 @@
 ---
-name: daily-check-report2
-description: "Iterative-loop variant of the daily diff report generator for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire), GitHub Changelog RSS, and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. This variant adds a mechanical, file-by-file work loop (`-Next`) so the report can be filled in small, well-defined steps without dropping quality — useful when driving the workflow with a less capable model. Use this when the user asks for the loop/反復版 of the daily check, デイリーチェック（ループ版）, or daily-check-report2 by name. The skill delegates to .github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1, writes split day-folder reports under reports/{yyyy}/{MM}/{dd}/, and updates timestamp.md on success while optionally committing and pushing the result. (The non-loop original is `daily-check-report`; both write to the same reports/ + timestamp.md.)"
+name: daily-check-report
+description: "Iterative-loop variant of the daily diff report generator for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire), GitHub Changelog RSS, and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. This variant adds a mechanical, file-by-file work loop (`-Next`) so the report can be filled in small, well-defined steps without dropping quality — useful when driving the workflow with a less capable model. Use this when the user asks for the loop/反復版 of the daily check, デイリーチェック（ループ版）, or daily-check-report by name. The skill delegates to .github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1, writes split day-folder reports under reports/{yyyy}/{MM}/{dd}/, and updates timestamp.md on success while optionally committing and pushing the result. (The non-loop original is `daily-check-report`; both write to the same reports/ + timestamp.md.)"
 ---
 
-# Daily Check レポート生成 Skill（反復ループ版 / daily-check-report2）
+# Daily Check レポート生成 Skill（反復ループ版 / daily-check-report）
 
 このリポジトリ (`runceel/daily-check`) の主目的である「指定 GitHub リポジトリ群 + Azure 更新の前回チェックからの差分レポートを生成する」ワークフローを、**機械的なファイル単位の反復ループ**で進められるようにした版です。情報収集はスクリプトが決定的に行い、エージェント（人間・各種モデル）は `-Next` が提示する **1 ファイル分の作業** を受け入れ基準に従って埋めるだけで、品質を落とさずレポートを完成できます。
 
@@ -11,7 +11,7 @@ description: "Iterative-loop variant of the daily diff report generator for a fi
 
 ## いつ使うか
 
-- 「daily-check report をループ版で」「反復版でデイリーチェック」「daily-check-report2 で」
+- 「daily-check report をループ版で」「反復版でデイリーチェック」「daily-check-report で」
 - 「差分レポートを 1 ファイルずつ埋めていきたい」「機械的に回したい」
 
 （単発・一括で作りたいだけなら `daily-check-report` でも構いません。）
@@ -32,7 +32,7 @@ description: "Iterative-loop variant of the daily diff report generator for a fi
 ### 1. 骨組みを生成する（既定＝非破壊）
 
 ```pwsh
-pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1
+pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1
 ```
 
 これにより以下がすべて自動で行われる:
@@ -47,7 +47,7 @@ pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1
 ### 2. `-Next` で 1 ファイルずつ埋める（ループの中核）
 
 ```pwsh
-pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -Next
+pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1 -Next
 ```
 
 `-Next` は **読み取り専用** で、次に埋めるべき **1 ファイル分の残作業** を提示する:
@@ -63,8 +63,8 @@ pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -N
 ### 3. 検証する（任意）
 
 ```pwsh
-pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -Status        # 進捗一覧（読み取り専用）
-pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -ValidateOnly   # gate（残マーカー/内容問題があれば失敗）
+pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1 -Status        # 進捗一覧（読み取り専用）
+pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1 -ValidateOnly   # gate（残マーカー/内容問題があれば失敗）
 ```
 
 `-Status` は各単位ファイルを `[記入済] / [要編集] / [欠落]` で一覧する（終了コード `0`=確定可 / `1`=要編集 / `2`=未生成）。`-ValidateOnly` は残マーカーに加え **空箇条書き・プレースホルダ語の内容チェック** も行い、問題があれば失敗扱いで停止する。
@@ -72,7 +72,7 @@ pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -V
 ### 4. 確定する（`timestamp.md` 更新 + commit / push）
 
 ```pwsh
-pwsh ./.github/skills/daily-check-report2/scripts/Invoke-DailyCheckReport.ps1 -Finalize
+pwsh ./.github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1 -Finalize
 ```
 
 `-Finalize` は生成を行わず、(1) 残マーカー（`<!-- TODO` / `{{` / `原文:`）と内容チェック問題が無いか検証し、(2) `index.md` の `daily-check-meta` を基準に `timestamp.md` を進め、(3) commit / push する。問題が残っていれば中止して該当箇所を表示する。手動 commit したい場合は `-Finalize -SkipCommit -SkipPush`。
