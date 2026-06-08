@@ -7,8 +7,6 @@ param(
     [switch]$Finalize,
     [switch]$ValidateOnly,
     [switch]$Status,
-    [switch]$Next,
-    [switch]$Json,
     [switch]$Force,
     [string]$GeneratedAtUtc
 )
@@ -28,7 +26,6 @@ $script:RepoConfigs = @(
     [PSCustomObject]@{ Owner='Azure';       Name='azure-functions-dotnet-worker';File='azure-functions-dotnet-worker.md';Mode='summary' },
     [PSCustomObject]@{ Owner='dotnet';      Name='extensions';                   File='extensions.md';                   Mode='summary' },
     [PSCustomObject]@{ Owner='runceel';     Name='ReactiveProperty';             File='reactiveproperty.md';             Mode='summary' },
-    [PSCustomObject]@{ Owner='microsoft';   Name='mxc';                          File='mxc.md';                          Mode='summary' },
     [PSCustomObject]@{ Owner='microsoft';   Name='aspire';                       File='aspire.md';                       Mode='detail' }
 )
 
@@ -501,12 +498,6 @@ function New-RepoDetailBody {
 
     Add-ImportanceSection -Lines $lines -Items $Important -Truncated ([bool]$Activity.Truncated)
 
-    # リポジトリ単位の要点（index 統合の素材。詳細モードは per-PR 断片しか無いため明示的に起こす）
-    $lines.Add('## このリポジトリの要点') | Out-Null
-    $lines.Add('') | Out-Null
-    $lines.Add('<!-- TODO: このリポジトリ全体の要点を 2〜4 行で日本語要約。注目すべき PR/Issue に言及し、index 統合の素材にする。特筆すべき動きが無ければ「特筆なし」と明記。この行ごと置換すること -->') | Out-Null
-    $lines.Add('') | Out-Null
-
     if ($mergedPrs.Count -gt 0) {
         $lines.Add('## 主要な PR (詳細)') | Out-Null
         $lines.Add('') | Out-Null
@@ -677,247 +668,6 @@ function Get-LeftoverMarkers {
     return $found.ToArray()
 }
 
-# ===================== 反復ループ (-Next) 用ヘルパー =====================
-
-function Get-MarkerKind {
-    <#
-      骨組みマーカー行を、埋めるべき内容の種別に分類する。受け入れ基準の出し分けに使う。
-      判定は TODO 文面の固有部分文字列で行う（順序が意味を持つので変更時は注意）。
-    #>
-    param([string]$LineText)
-
-    $t = [string]$LineText
-    if ($t -match '原文:') { return 'feed' }
-    if ($t -match '影響を1行') { return 'importance-impact' }
-    if ($t -match '主要な変更点を') { return 'repo-summary' }
-    if ($t -match 'このリポジトリ全体の要点') { return 'repo-points' }
-    if ($t -match '変更内容を') { return 'pr-summary' }
-    if ($t -match 'API シグネチャ') { return 'pr-api-detail' }
-    if ($t -match 'マイグレーション要否') { return 'pr-impact' }
-    if ($t -match '統計サマリーと PR/Issue') { return 'manual-fill' }
-    if ($t -match '特に注目すべきトピック') { return 'index-exec' }
-    if ($t -match '横断的なテーマ') { return 'index-trends' }
-    if ($t -match '継続ウォッチ中') { return 'index-next' }
-    return 'generic'
-}
-
-function Get-AcceptanceCriteria {
-    <#
-      マーカー種別ごとの「これを満たせば完成」という受け入れ基準を返す。
-      マーカーが消えただけでは品質が担保されないため、文面で品質要件を明示する。
-    #>
-    param([string]$Kind)
-
-    switch ($Kind) {
-        'feed'              { return '原文に基づき、何が変わるか/誰に影響するか/対応の要否を日本語 1〜3 文で。単なる告知か要対応かを区別する。' }
-        'importance-impact' { return '誰が何を確認・対応すべきかを1行で補う。自動判定が無関係なら、その箇条書き行ごと削除してよい。' }
-        'repo-summary'      { return '統計と一覧から主要な変更点を 3〜8 行の箇条書きで。注目 PR/Issue に言及し、⚠ 重要項目は必ず含める。動きが無ければ「特筆すべき変更なし」と明記。' }
-        'repo-points'       { return 'リポジトリ全体の要点を 2〜4 行で。index 統合で使えるよう注目点を示す。特筆すべき動きが無ければ「特筆なし」と明記。' }
-        'pr-summary'        { return 'この PR が何を解決するか＋主要な変更点＋影響範囲を 3〜6 行で。' }
-        'pr-api-detail'     { return 'API シグネチャ変更・破壊的変更・新規抽象を抽出して説明。破壊的変更があれば「⚠ 破壊的変更」と明示。' }
-        'pr-impact'         { return '既存利用者のマイグレーション要否を 1〜3 行で。' }
-        'manual-fill'       { return 'gh 収集に失敗している。可能なら gh search を手動実行して統計・一覧を補完する。データが得られない場合は「収集失敗のため未集計。手動確認が必要」と明記して TODO 行を置換する（空のまま残さない）。' }
-        'index-exec'        { return '全体の重要な変更 + Azure/Changelog を横断し、注目トピックを 3〜5 件リンク付き箇条書きで。下記の ⚠ 重要項目を取りこぼさない。' }
-        'index-trends'      { return '横断的テーマを 2〜4 行で。変化が乏しければトレンドを捏造せず「目立った横断トレンドなし」と明記する。' }
-        'index-next'        { return '継続ウォッチ中の PR/Issue・Azure の次段階待ち・次回の重点を列挙。下記の前回メモがあれば引き継ぐ。' }
-        'content-empty-bullet' { return '空の箇条書き（内容未記入）。実際の内容を記入するか、不要なら行ごと削除する。' }
-        'content-placeholder'  { return 'プレースホルダ語が残っている。実際の日本語記述に置き換える。' }
-        default             { return 'TODO コメントの指示に従い、日本語で記述する。' }
-    }
-}
-
-function Get-PendingWorkForFile {
-    <#
-      ファイル内の残マーカーを、行番号・直近見出し・種別・受け入れ基準付きの
-      オブジェクト配列で返す。-Next がファイル単位の作業指示として提示する。
-    #>
-    param([string]$Path)
-
-    $result = New-Object System.Collections.Generic.List[object]
-    if (-not (Test-Path -LiteralPath $Path)) { return @() }
-
-    $allLines = [System.IO.File]::ReadAllLines($Path, [System.Text.UTF8Encoding]::new($false))
-    $heading = ''
-    for ($i = 0; $i -lt $allLines.Count; $i++) {
-        $line = $allLines[$i]
-        if ($line -match '^\s*#{1,6}\s+(.*)$') { $heading = $Matches[1].Trim() }
-
-        $isMarker = $false
-        foreach ($m in $script:SkeletonMarkers) {
-            if ($line.Contains($m)) { $isMarker = $true; break }
-        }
-        if (-not $isMarker) { continue }
-
-        $kind = Get-MarkerKind -LineText $line
-        $result.Add([PSCustomObject]@{
-            Line       = $i + 1
-            Heading    = $heading
-            Kind       = $kind
-            Text       = $line.Trim()
-            Acceptance = (Get-AcceptanceCriteria -Kind $kind)
-        }) | Out-Null
-    }
-    return $result.ToArray()
-}
-
-function Get-ContentIssues {
-    <#
-      マーカー不在でも残りうる「未完成の痕跡」を保守的に検出する。
-        - 空の箇条書き（trim 後が "-" / "*" のみ）
-        - 自分への指示が残ったプレースホルダ語（タイトル等での誤検出を避け、語は厳選）
-      表行 (| ...) や <details> 等の HTML 行はプレースホルダ走査の対象外にする。
-      返り値は行番号・見出し・種別・受け入れ基準付きのオブジェクト配列。
-    #>
-    param([string]$Path)
-
-    $issues = New-Object System.Collections.Generic.List[object]
-    if (-not (Test-Path -LiteralPath $Path)) { return @() }
-
-    # 実在の PR/RSS タイトルに紛れ込みにくい、明確に「自分への指示」な語のみ
-    $placeholders = @('要約してください', '記入してください', 'ここに記入', 'ここに記述')
-
-    $allLines = [System.IO.File]::ReadAllLines($Path, [System.Text.UTF8Encoding]::new($false))
-    $heading = ''
-    for ($i = 0; $i -lt $allLines.Count; $i++) {
-        $line = $allLines[$i]
-        if ($line -match '^\s*#{1,6}\s+(.*)$') { $heading = $Matches[1].Trim() }
-        $trim = $line.Trim()
-
-        if ($trim -eq '-' -or $trim -eq '*') {
-            $issues.Add([PSCustomObject]@{
-                Line = $i + 1; Heading = $heading; Kind = 'content-empty-bullet'
-                Text = '(空の箇条書き)'; Acceptance = (Get-AcceptanceCriteria -Kind 'content-empty-bullet')
-            }) | Out-Null
-            continue
-        }
-
-        if ($trim.StartsWith('|') -or $trim.StartsWith('<')) { continue }
-        foreach ($ph in $placeholders) {
-            if ($line.Contains($ph)) {
-                $issues.Add([PSCustomObject]@{
-                    Line = $i + 1; Heading = $heading; Kind = 'content-placeholder'
-                    Text = $trim; Acceptance = (Get-AcceptanceCriteria -Kind 'content-placeholder')
-                }) | Out-Null
-                break
-            }
-        }
-    }
-    return $issues.ToArray()
-}
-
-function Get-FileWorkItems {
-    <#
-      1 ファイルの「残作業」= 残マーカー + 内容チェック問題 を結合し、行番号順で返す。
-      -Next のファイル単位判定と、ループと -Finalize ゲートの整合に使う。
-    #>
-    param([string]$Path)
-
-    $items = New-Object System.Collections.Generic.List[object]
-    foreach ($w in @(Get-PendingWorkForFile -Path $Path)) { $items.Add($w) | Out-Null }
-    foreach ($c in @(Get-ContentIssues -Path $Path)) { $items.Add($c) | Out-Null }
-    return @($items | Sort-Object Line)
-}
-
-function Get-WorkFingerprint {
-    <#
-      ファイル名＋残作業（行番号・種別）から決定的な指紋を作る。-Next は状態を持たない
-      ため、同じファイル・同じ指紋が編集後も再提示されたら「無進捗」と判断する材料にする。
-    #>
-    param([string]$File, [object[]]$Items)
-
-    $basis = $File + '|' + ((@($Items) | ForEach-Object { [string]$_.Line + ':' + $_.Kind }) -join ',')
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($basis))
-    } finally {
-        $sha.Dispose()
-    }
-    return (([System.BitConverter]::ToString($hash) -replace '-', '').Substring(0, 16).ToLowerInvariant())
-}
-
-function Get-DateShapedReportDirs {
-    <#
-      reports/yyyy/MM/dd/index.md だけを対象に、index.md を持つレポートディレクトリの
-      フルパスを古い順（パス昇順＝時系列）で返す。バックアップ等の混入を避ける。
-    #>
-    param([string]$Root = 'reports')
-
-    if (-not (Test-Path -LiteralPath $Root)) { return @() }
-    $candidates = Get-ChildItem -Path $Root -Recurse -Filter 'index.md' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -match '[\\/]\d{4}[\\/]\d{2}[\\/]\d{2}[\\/]index\.md$' } |
-        Sort-Object FullName
-    return @($candidates | ForEach-Object { Split-Path -Parent $_.FullName })
-}
-
-function Get-PreviousReportDir {
-    <#
-      現在のレポートを除く「直近の完成済み（残マーカー無し）レポートディレクトリ」を返す。
-      未確定のドラフトを誤って継続素材にしないよう、マーカーの残るものはスキップする。無ければ $null。
-    #>
-    param([string]$ExcludeDir)
-
-    $excludeFull = $null
-    if ($ExcludeDir -and (Test-Path -LiteralPath $ExcludeDir)) {
-        $excludeFull = (Resolve-Path -LiteralPath $ExcludeDir).Path
-    }
-
-    $dirs = Get-DateShapedReportDirs
-    for ($i = $dirs.Count - 1; $i -ge 0; $i--) {
-        $d = $dirs[$i]
-        if ($excludeFull -and $d -eq $excludeFull) { continue }
-        $idx = Join-Path $d 'index.md'
-        if (@(Get-LeftoverMarkers -Path $idx).Count -gt 0) { continue }  # 未確定はスキップ
-        return $d
-    }
-    return $null
-}
-
-function Get-NextCheckMemo {
-    <#
-      index.md の「## 次回チェック…」セクション本文を抽出する。次の見出しまたは meta 行で打ち切る。
-      継続ウォッチを今回レポートへ機械的に引き継ぐために -Next が提示する。無ければ $null。
-    #>
-    param([string]$IndexPath)
-
-    if (-not (Test-Path -LiteralPath $IndexPath)) { return $null }
-    $allLines = [System.IO.File]::ReadAllLines($IndexPath, [System.Text.UTF8Encoding]::new($false))
-    $capture = $false
-    $buf = New-Object System.Collections.Generic.List[string]
-    foreach ($line in $allLines) {
-        if ($line -match '^##\s+次回チェック') { $capture = $true; continue }
-        if ($capture) {
-            if ($line -match '^##\s+') { break }
-            if ($line -match 'daily-check-meta') { break }
-            $buf.Add($line) | Out-Null
-        }
-    }
-    $text = ($buf -join [Environment]::NewLine).Trim()
-    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
-    return $text
-}
-
-function Get-IndexImportanceItems {
-    <#
-      index.md の「## ⚠ 全体の重要な変更」テーブルのデータ行（ヘッダ/区切りを除く）を返す。
-      エグゼクティブサマリーで ⚠ 項目を取りこぼさないための根拠として -Next が提示する。
-    #>
-    param([string]$IndexPath)
-
-    $items = New-Object System.Collections.Generic.List[string]
-    if (-not (Test-Path -LiteralPath $IndexPath)) { return @() }
-    $allLines = [System.IO.File]::ReadAllLines($IndexPath, [System.Text.UTF8Encoding]::new($false))
-    $inSection = $false
-    foreach ($line in $allLines) {
-        if ($line -match '^##\s+⚠ 全体の重要な変更') { $inSection = $true; continue }
-        if ($inSection -and $line -match '^##\s+') { break }
-        if ($inSection -and $line.TrimStart().StartsWith('|')) {
-            if ($line -match '^\s*\|\s*種別' -or $line -match '^\s*\|\s*-{2,}') { continue }  # ヘッダ/区切り
-            $items.Add($line.Trim()) | Out-Null
-        }
-    }
-    return $items.ToArray()
-}
-
 function Write-ReportFile {
     <#
       レポートファイルを書き出す。ただし「既に存在し、骨組みマーカーが残っていない
@@ -983,15 +733,6 @@ Push-Location $repoRoot
 try {
     $script:SkippedFiles = New-Object System.Collections.Generic.List[string]
 
-    # モード排他チェック: -Next / -Status / -ValidateOnly / -Finalize は同時指定できない
-    $modeCount = @($Next, $Status, $ValidateOnly, $Finalize | Where-Object { $_ }).Count
-    if ($modeCount -gt 1) {
-        throw '-Next / -Status / -ValidateOnly / -Finalize は同時に指定できません。いずれか一つだけを指定してください。'
-    }
-    if ($Json -and -not $Next) {
-        throw '-Json は -Next と併用してください（他モードでは未対応です）。'
-    }
-
     $nowUtc = if ([string]::IsNullOrWhiteSpace($GeneratedAtUtc)) {
         (Get-Date).ToUniversalTime()
     } else {
@@ -1018,157 +759,17 @@ try {
         'aspire.md'                         = '# microsoft/aspire'
     }
 
-    # -ValidateOnly / -Status / -Next は読み取り専用なので、当日ディレクトリが無ければ最新レポートへフォールバックする。
+    # -ValidateOnly / -Status は読み取り専用なので、当日ディレクトリが無ければ最新レポートへフォールバックする。
     # -Finalize は破壊的（timestamp 更新 + commit/push）なので、別日のレポートを誤って確定しないよう
     # フォールバックしない（当日 or 明示 -GeneratedAtUtc の日付のみを対象にする）。
-    $isFallback = $false
-    if ($ValidateOnly -or $Status -or $Next) {
+    if ($ValidateOnly -or $Status) {
         if (-not (Test-Path -LiteralPath (Join-Path $reportDir 'index.md'))) {
             $latest = Get-LatestReportDir
             if ($latest) {
                 $reportDir = $latest
-                $isFallback = $true
-                if (-not $Json) {
-                    Write-Host ('[info] 当日のレポートが無いため最新レポートを対象にします: ' + $reportDir) -ForegroundColor Cyan
-                }
+                Write-Host ('[info] 当日のレポートが無いため最新レポートを対象にします: ' + $reportDir) -ForegroundColor Cyan
             }
         }
-    }
-
-    # ===== -Next: 残作業を1ファイル分だけ提示する読み取り専用ワークディスペンサー =====
-    # フェーズ: Phase1 = 事実ファイル（index 以外）、Phase2 = index.md（Phase1 完了後のみ）。
-    # 「残作業」= 残マーカー + 内容チェック問題（空箇条書き等）。-Finalize ゲートと整合させ、
-    # ループが「完了」と言ったのに finalize が落ちる事態を防ぐ。
-    # 終了コード: 0 = 残作業なし（-Finalize へ）/ 1 = 作業を提示 / 2 = 未生成・ファイル欠落
-    if ($Next) {
-        $indexPath = Join-Path $reportDir 'index.md'
-        if (-not (Test-Path -LiteralPath $indexPath)) {
-            if ($Json) {
-                @{ status = 'no-report'; reportDir = $reportDir } | ConvertTo-Json -Compress | Write-Output
-            } else {
-                Write-Host '  レポートが見つかりません。先に骨組みを生成してください（オプション無しで実行）。' -ForegroundColor Yellow
-            }
-            exit 2
-        }
-
-        # 欠落している単位ファイルがあれば、index へ進む前に停止して骨組み再生成を促す
-        # （Get-LeftoverMarkers は欠落ファイルを空=完了と誤認するため、ここで明示的に弾く）
-        $missing = @($unitFileHeaders.Keys | Where-Object { -not (Test-Path -LiteralPath (Join-Path $reportDir $_)) })
-        if ($missing.Count -gt 0) {
-            if ($Json) {
-                @{ status = 'missing-file'; reportDir = $reportDir; missing = $missing } | ConvertTo-Json -Compress -Depth 4 | Write-Output
-            } else {
-                Write-Host ('  必須の単位ファイルが欠落しています: ' + ($missing -join ', ')) -ForegroundColor Red
-                Write-Host '  オプション無しで再実行して骨組みを再生成してください（記入済みファイルは保護されます）。'
-            }
-            exit 2
-        }
-
-        # Phase1: index 以外で残作業のある最初のファイル
-        $phase1Files = @($unitFileHeaders.Keys | Where-Object { $_ -ne 'index.md' })
-        $target = $null
-        $phase = 0
-        foreach ($f in $phase1Files) {
-            $work = @(Get-FileWorkItems -Path (Join-Path $reportDir $f))
-            if ($work.Count -gt 0) { $target = $f; $phase = 1; break }
-        }
-        # Phase2: Phase1 完了後に index
-        if (-not $target) {
-            $idxWork = @(Get-FileWorkItems -Path $indexPath)
-            if ($idxWork.Count -gt 0) { $target = 'index.md'; $phase = 2 }
-        }
-
-        if (-not $target) {
-            if ($Json) {
-                @{ status = 'done'; reportDir = $reportDir } | ConvertTo-Json -Compress | Write-Output
-            } else {
-                Write-Host '結果: 残作業はありません。全ファイル記入済みです。' -ForegroundColor Green
-                Write-Host ('次の手順:  pwsh ' + $PSCommandPath + ' -ValidateOnly   →   -Finalize')
-            }
-            exit 0
-        }
-
-        $targetPath = Join-Path $reportDir $target
-        $work = @(Get-FileWorkItems -Path $targetPath)
-        $fingerprint = Get-WorkFingerprint -File $target -Items $work
-
-        # index 用の追加コンテキスト（根拠。そのまま本文へ貼らず、合成の材料にする）
-        $prevMemo = $null
-        $prevMemoFound = $false
-        $impItems = @()
-        if ($target -eq 'index.md') {
-            $prevDir = Get-PreviousReportDir -ExcludeDir $reportDir
-            if ($prevDir) {
-                $prevMemo = Get-NextCheckMemo -IndexPath (Join-Path $prevDir 'index.md')
-                if ($prevMemo) { $prevMemoFound = $true }
-            }
-            $impItems = @(Get-IndexImportanceItems -IndexPath $indexPath)
-        }
-
-        if ($Json) {
-            $obj = [ordered]@{
-                status       = 'work'
-                reportDir    = $reportDir
-                isFallback   = [bool]$isFallback
-                phase        = $phase
-                file         = $target
-                pendingCount = $work.Count
-                fingerprint  = $fingerprint
-                references   = @(
-                    '.github/skills/daily-check-report2/references/report-template.md',
-                    '.github/skills/daily-check-report2/references/quality-rules.md'
-                )
-                markers      = @($work | ForEach-Object {
-                    [ordered]@{ line = $_.Line; heading = $_.Heading; kind = $_.Kind; text = $_.Text; acceptance = $_.Acceptance }
-                })
-            }
-            if ($target -eq 'index.md') {
-                $obj.context = [ordered]@{
-                    note                 = '以下は根拠（evidence）です。表の行や原文をそのまま本文へ貼らず、合成の材料として使ってください。'
-                    importanceItems      = $impItems
-                    previousNextCheckMemo = $prevMemo
-                    previousMemoFound    = $prevMemoFound
-                    readGuidance         = '各ファイルの「主要な変更点 / 要点 / ⚠ 重要な変更 / feed 要約」のみ読む。<details> は読まない。'
-                    quietDayGuidance     = '変化が乏しければトレンドを捏造せず、その旨を明記する。'
-                }
-            }
-            $obj | ConvertTo-Json -Depth 8 | Write-Output
-            exit 1
-        }
-
-        Write-Host ('==== 次の作業 (Phase ' + $phase + ') ====') -ForegroundColor Cyan
-        Write-Host ('対象ファイル: ' + $targetPath)
-        if ($isFallback) { Write-Host '  ※ 当日レポートが無いため最新レポートを対象にしています。' -ForegroundColor Cyan }
-        Write-Host ('残作業: ' + $work.Count + ' 箇所 / 指紋: ' + $fingerprint)
-        Write-Host '参照: references/report-template.md ・ references/quality-rules.md'
-        Write-Host ''
-        foreach ($w in $work) {
-            Write-Host ('  L' + $w.Line + ' [' + $w.Kind + '] @ ' + $w.Heading) -ForegroundColor Yellow
-            Write-Host ('     現在: ' + $w.Text)
-            Write-Host ('     受入: ' + $w.Acceptance)
-        }
-        if ($target -eq 'index.md') {
-            Write-Host ''
-            Write-Host '---- index 統合の追加コンテキスト（根拠。そのまま貼らない） ----' -ForegroundColor Cyan
-            if ($impItems.Count -gt 0) {
-                Write-Host '  ⚠ 重要項目（エグゼクティブサマリーで取りこぼさないこと）:'
-                $impItems | ForEach-Object { Write-Host ('    ' + $_) }
-            } else {
-                Write-Host '  ⚠ 自動判定された重要項目はありません。'
-            }
-            Write-Host '  読む範囲: 各ファイルの「主要な変更点 / 要点 / ⚠ 重要な変更 / feed 要約」のみ。<details> は読まない。'
-            Write-Host '  静かな日: 変化が乏しければトレンドを捏造せず、その旨を明記する。'
-            if ($prevMemoFound) {
-                Write-Host '  前回（確定済み）レポートの「次回チェックに向けたメモ」（継続ウォッチ素材）:'
-                ($prevMemo -split "`n") | ForEach-Object { Write-Host ('    ' + $_) }
-            } else {
-                Write-Host '  前回の確定済み「次回メモ」は見つかりませんでした（初回 / 該当なし）。'
-            }
-        }
-        Write-Host ''
-        Write-Host 'このファイルを編集後、再度 -Next を実行してください。'
-        Write-Host '※ 同じ対象ファイル・同じ指紋が編集後も再提示されたら「無進捗」です。原因（残った <!-- TODO / 原文: / {{、空箇条書き）を確認し、解消できなければ中止してエスカレーションしてください。'
-        exit 1
     }
 
     # ===== -Status: 編集が必要か（残マーカーの有無）を読み取り専用で表示する。エラー扱いにしない =====
@@ -1216,7 +817,6 @@ try {
             throw ('Report directory does not exist: ' + $reportDir + '（先に骨組みを生成してください）')
         }
         $leftoverTotal = 0
-        $contentTotal = 0
         foreach ($f in $unitFileHeaders.Keys) {
             $p = Join-Path $reportDir $f
             if (-not (Test-Path -LiteralPath $p)) { continue }
@@ -1226,17 +826,11 @@ try {
                 Write-Host ('[未記入] ' + $f) -ForegroundColor Yellow
                 $left | ForEach-Object { Write-Host $_ }
             }
-            $content = @(Get-ContentIssues -Path $p)
-            if ($content.Count -gt 0) {
-                $contentTotal += $content.Count
-                Write-Host ('[内容要確認] ' + $f) -ForegroundColor Yellow
-                $content | ForEach-Object { Write-Host ('  L' + $_.Line + ': ' + $_.Kind + ' — ' + $_.Text) }
-            }
         }
-        if ($leftoverTotal -gt 0 -or $contentTotal -gt 0) {
-            throw ('未完成です。未記入マーカー ' + $leftoverTotal + ' 件 / 内容チェック問題（空箇条書き・プレースホルダ語）' + $contentTotal + ' 件。すべて解消してください。')
+        if ($leftoverTotal -gt 0) {
+            throw ('未記入の骨組みマーカーが ' + $leftoverTotal + ' 件残っています。日本語解説に置き換えてください。')
         }
-        Write-Host '  すべての単位ファイルが記入済みです（残存マーカー・内容問題なし）。' -ForegroundColor Green
+        Write-Host '  すべての単位ファイルが記入済みです（残存マーカーなし）。' -ForegroundColor Green
         return
     }
 
@@ -1249,7 +843,6 @@ try {
         }
 
         $leftoverTotal = 0
-        $contentTotal = 0
         foreach ($f in $unitFileHeaders.Keys) {
             $p = Join-Path $reportDir $f
             if (-not (Test-Path -LiteralPath $p)) {
@@ -1261,15 +854,9 @@ try {
                 Write-Host ('[未記入] ' + $f) -ForegroundColor Yellow
                 $left | ForEach-Object { Write-Host $_ }
             }
-            $content = @(Get-ContentIssues -Path $p)
-            if ($content.Count -gt 0) {
-                $contentTotal += $content.Count
-                Write-Host ('[内容要確認] ' + $f) -ForegroundColor Yellow
-                $content | ForEach-Object { Write-Host ('  L' + $_.Line + ': ' + $_.Kind + ' — ' + $_.Text) }
-            }
         }
-        if ($leftoverTotal -gt 0 -or $contentTotal -gt 0) {
-            throw ('未記入マーカー ' + $leftoverTotal + ' 件 / 内容チェック問題 ' + $contentTotal + ' 件が残っているため finalize できません。すべて埋めてから再実行してください。')
+        if ($leftoverTotal -gt 0) {
+            throw ('未記入の骨組みマーカーが ' + $leftoverTotal + ' 件残っているため finalize できません。すべて埋めてから再実行してください。')
         }
 
         foreach ($f in $unitFileHeaders.Keys) {
@@ -1347,7 +934,7 @@ try {
     $azureLines.Add('') | Out-Null
     $azureLines.Add('対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' (UTC)') | Out-Null
     $azureLines.Add('') | Out-Null
-    $azureLines.Add('対象期間内の Azure RSS 新着は **' + $azureItems.Count + ' 件** です。各見出し直下の TODO コメント（HTML コメント形式の指示行）を日本語解説に置き換えてください（原文の要約はそのコメント内に保持しています）。GA / リタイア / 破壊的変更など影響の大きい項目は優先して記述してください。') | Out-Null
+    $azureLines.Add('対象期間内の Azure RSS 新着は **' + $azureItems.Count + ' 件** です。各見出し下の `<!-- TODO ... -->` を日本語解説に置き換えてください（原文要約は TODO コメント内に保持しています）。GA / リタイア / 破壊的変更など影響の大きい項目は優先して記述してください。') | Out-Null
     $azureLines.Add('') | Out-Null
 
     foreach ($item in ($azureItems | Select-Object -First 20)) {
@@ -1376,7 +963,7 @@ try {
     $ghLines.Add('') | Out-Null
     $ghLines.Add('対象期間: ' + $previousCheckAtUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' 〜 ' + $nowUtc.ToString('yyyy-MM-dd HH:mm:ss') + ' (UTC)') | Out-Null
     $ghLines.Add('') | Out-Null
-    $ghLines.Add('対象期間内の GitHub Changelog 新着は **' + $githubItems.Count + ' 件** です。各見出し直下の TODO コメント（HTML コメント形式の指示行）を日本語解説に置き換えてください（原文の要約はそのコメント内に保持しています）。') | Out-Null
+    $ghLines.Add('対象期間内の GitHub Changelog 新着は **' + $githubItems.Count + ' 件** です。各見出し下の `<!-- TODO ... -->` を日本語解説に置き換えてください（原文要約は TODO コメント内に保持しています）。') | Out-Null
     $ghLines.Add('') | Out-Null
 
     foreach ($item in $githubItems) {
@@ -1518,12 +1105,10 @@ try {
     if ($script:SkippedFiles.Count -gt 0) {
         Write-Host ('  ※ 保護のためスキップした既存ファイル: ' + $script:SkippedFiles.Count + ' 件（再生成するには -Force を付与）') -ForegroundColor Yellow
     }
-    Write-Host '次の手順（反復ループ推奨）:'
-    Write-Host ('  1) 次の1ファイル分の作業を取得:  pwsh ' + $PSCommandPath + ' -Next')
-    Write-Host '     提示されたファイルの <!-- TODO ... --> と空箇条書きを、受け入れ基準に従って日本語で埋める'
-    Write-Host ('  2) 編集後、再度 -Next。「残作業なし」になるまで 1〜2 を繰り返す（事実ファイル → 最後に index.md の順で提示）')
-    Write-Host ('  3) 検証:  pwsh ' + $PSCommandPath + ' -ValidateOnly   （任意。-Status で進捗一覧も可）')
-    Write-Host ('  4) 確定 (timestamp 更新 + commit/push):  pwsh ' + $PSCommandPath + ' -Finalize')
+    Write-Host '次の手順:'
+    Write-Host '  1) 各単位ファイルの <!-- TODO ... --> を日本語解説に置き換える（「重要な変更」を最優先）'
+    Write-Host ('  2) 記入状況を検証:  pwsh ' + $PSCommandPath + ' -ValidateOnly')
+    Write-Host ('  3) 確定 (timestamp 更新 + commit/push):  pwsh ' + $PSCommandPath + ' -Finalize')
     Write-Host '     ※ 既定の再実行では記入済みファイルは保護され、timestamp 更新・commit は行いません。'
 }
 finally {
