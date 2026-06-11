@@ -509,14 +509,21 @@ function New-RepoDetailBody {
     $lines.Add('') | Out-Null
 
     if ($mergedPrs.Count -gt 0) {
+        $importanceOrder = @{ '⚠ 破壊的変更' = 0; '⚠ セキュリティ' = 1; '非推奨/廃止' = 2; 'GA 昇格' = 3 }
+        $importantMergedPrs = @($mergedPrs |
+            Where-Object { Get-ChangeImportance -Title $_.title -Labels $_.labels } |
+            Sort-Object -Stable @{ Expression = { $importanceOrder[(Get-ChangeImportance -Title $_.title -Labels $_.labels)] } }, @{ Expression = { [int]$_.number }; Descending = $true })
+        $regularDetailLimit = [Math]::Max(0, $DetailPrLimit - $importantMergedPrs.Count)
+        $regularPrs = @($mergedPrs |
+            Where-Object { -not (Get-ChangeImportance -Title $_.title -Labels $_.labels) } |
+            Select-Object -First $regularDetailLimit)
+        $topPrs = @($importantMergedPrs + $regularPrs)
+
         $lines.Add('## 主要な PR (詳細)') | Out-Null
         $lines.Add('') | Out-Null
-        $lines.Add('> **重要度の高い PR（破壊的変更/セキュリティ/非推奨/GA）を優先**しつつ、上位 ' + [Math]::Min($DetailPrLimit, $mergedPrs.Count) + ' 件の **マージ済み PR** について、`gh pr view` で取得した変更ファイル / コミット情報を `<details>` に事前展開しています。各 PR の「変更概要」「コミットレベルの詳細」「既存利用者への影響」を日本語で追記してください。') | Out-Null
+        $lines.Add('> **重要度の高いマージ済み PR（破壊的変更/セキュリティ/非推奨/GA）は件数制限の対象外として全件**、それに加えて通常のマージ済み PR を合計 ' + $DetailPrLimit + ' 件程度になるまで補完し、`gh pr view` で取得した変更ファイル / コミット情報を `<details>` に事前展開しています。各 PR の「変更概要」「コミットレベルの詳細」「既存利用者への影響」を日本語で追記してください。') | Out-Null
         $lines.Add('') | Out-Null
 
-        $topPrs = $mergedPrs |
-            Sort-Object -Stable @{ Expression = { if (Get-ChangeImportance -Title $_.title -Labels $_.labels) { 0 } else { 1 } } } |
-            Select-Object -First $DetailPrLimit
         foreach ($pr in $topPrs) {
             $detail = Get-PrDetail -Repo $repo -PrNumber $pr.number
             $title = ($pr.title -replace '\|', '\|')

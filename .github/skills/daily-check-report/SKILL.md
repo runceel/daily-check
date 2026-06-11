@@ -62,6 +62,7 @@ Rules:
 - Follow phase order: fact files first (`azure`, `github-changelog`, repo files), then `index.md` last.
 - Replace all `<!-- TODO ... -->` markers and required empty bullets in the target file.
 - **Write report prose in Japanese**.
+- Important changes (breaking/security/deprecation/GA) are never subject to the detailed-PR count cap. In detailed repos, all important merged PRs must be expanded and filled; regular merged PRs only fill the remaining detail slots.
 - Repeat `-Next` until it returns "no remaining work" (exit code `0`).
 - Use `-Next -Json` for machine-readable output.
 
