@@ -42,6 +42,23 @@ Use this skill when the user asks for daily-check updates or incremental diffs, 
 
 Default generation does not update `timestamp.md` and does not commit.
 
+## Delegation policy
+
+This skill may use cheaper sub-agents for localized drafting, but the parent agent must retain ownership of the report workflow.
+
+- Parent agent responsibilities:
+  - Run scaffold generation, `-Next`, `-Status`, `-ValidateOnly`, and `-Finalize`.
+  - Decide the next work item from `-Next` and apply edits to report files.
+  - Ensure important changes are not missed, especially when GitHub collection is truncated.
+  - Write or review `index.md`, because it requires cross-file synthesis and previous memo carry-over.
+  - Perform final validation and timestamp/commit/push decisions.
+- Sub-agent responsibilities:
+  - Draft localized Japanese prose for one bounded unit: a feed item, one summary repo section, or one detailed PR block.
+  - Use only the context provided by the parent agent (`-Next` JSON, relevant file excerpt, and acceptance criteria).
+  - Return draft text and rationale; do not run `-Next`, `-Finalize`, commit, push, or edit files directly unless the parent explicitly delegates that exact file in the same session.
+- New project sessions may be used only for research or drafting. Avoid multiple sessions editing the same report files; if a separate session is used, the parent session applies the final text to prevent conflicts.
+- Cheap models are appropriate for local item summaries. Use a stronger model or parent review for `index.md`, important-change triage, conflict resolution, and validation failures.
+
 ## Commands
 
 ### 1. Generate scaffold (default, non-destructive)
