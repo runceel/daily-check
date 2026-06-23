@@ -1,5 +1,5 @@
 ---
-name: daily-check-report
+name: create-daily-report
 description: "Generate a daily/periodic diff report for a fixed set of GitHub repositories (microsoft/agent-framework, dotnet/aspnetcore, Azure/azure-functions-dotnet-worker, dotnet/extensions, runceel/ReactiveProperty, microsoft/aspire), GitHub Changelog RSS, and Azure release announcements RSS, comparing against the previous run recorded in timestamp.md. Use this when the user asks for a daily check, daily-check report, 差分レポート, 前回からの差分, デイリーチェック, or otherwise requests an update summary across these repos and Azure updates. The workflow runs as a mechanical, file-by-file loop (`-Next`) so the report can be filled in small, well-defined steps without dropping quality — robust even when driven by a less capable model. The skill delegates to .github/skills/daily-check-report/scripts/Invoke-DailyCheckReport.ps1, writes split day-folder reports under reports/{yyyy}/{MM}/{dd}/ (folder date is JST/Asia-Tokyo), and updates timestamp.md on success while optionally committing and pushing the result. The skill definition and operation guidance are in English, while the report content itself must remain in Japanese."
 ---
 
