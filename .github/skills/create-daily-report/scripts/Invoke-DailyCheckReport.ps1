@@ -1132,8 +1132,8 @@ try {
                 pendingCount = $work.Count
                 fingerprint  = $fingerprint
                 references   = @(
-                    '.github/skills/daily-check-report/references/report-template.md',
-                    '.github/skills/daily-check-report/references/quality-rules.md'
+                    '.github/skills/create-daily-report/references/report-template.md',
+                    '.github/skills/create-daily-report/references/quality-rules.md'
                 )
                 markers      = @($work | ForEach-Object {
                     [ordered]@{ line = $_.Line; heading = $_.Heading; kind = $_.Kind; text = $_.Text; acceptance = $_.Acceptance }
