@@ -11,32 +11,32 @@
 - 公開日 (UTC): `2026-07-01 17:19:25`
 - リンク: <https://azure.microsoft.com/updates?id=566209>
 
-<!-- TODO: 何が変わるか / 誰に影響するか / どう使い始める・移行するか を 2〜4 行で日本語要約。この行ごと置換すること。原文: We’re excited to introduce the newly renamed Az.PostgreSQLFlexibleServer PowerShell module, delivering a more streamlined experience for you to manage Azure Database for PostgreSQL with PowerShell. Building on the capabilities of the previous Az.PostgreSq -->
+Azure Database for PostgreSQL Flexible Server 向け PowerShell モジュールが `Az.PostgreSQLFlexibleServer` として整理され、PowerShell からの管理体験が分かりやすくなりました。既存の PowerShell 自動化を使っている運用担当者は、モジュール名やコマンド参照の更新有無を確認するとよさそうです。
 
 ## [Launched] Public Preview: Document PII playground sample in Microsoft Foundry NextGen
 
 - 公開日 (UTC): `2026-07-01 17:04:40`
 - リンク: <https://azure.microsoft.com/updates?id=563331>
 
-<!-- TODO: 何が変わるか / 誰に影響するか / どう使い始める・移行するか を 2〜4 行で日本語要約。この行ごと置換すること。原文: Document-based PII detection in Azure AI Language now ships an initial playground experience in the Microsoft Foundry NextGen portal. The playground loads a prepared sample document, runs it through the document-based PII feature, and shows the redacted o -->
+Microsoft Foundry NextGen ポータルに、Azure AI Language のドキュメント PII 検出を試せるサンプル付き playground が追加されました。文書内の個人情報検出・マスキングを評価したい開発者向けのプレビューで、本番移行というより事前検証に使う位置づけです。
 
 ## [Launched] Generally Available: Document PII NextGen Playground in Azure AI Language
 
 - 公開日 (UTC): `2026-07-01 17:01:07`
 - リンク: <https://azure.microsoft.com/updates?id=564382>
 
-<!-- TODO: 何が変わるか / 誰に影響するか / どう使い始める・移行するか を 2〜4 行で日本語要約。この行ごと置換すること。原文: Azure AI Language now offers a refreshed Document PII playground in general availability, giving customers a faster way to evaluate personally identifiable information detection on documents. The playground ships with curated sample inputs and outputs, so -->
+Azure AI Language の Document PII playground が GA になり、文書に含まれる個人情報検出を curated sample で素早く評価できるようになりました。PII 検出をアプリに組み込むチームは、PoC や精度確認の初期ステップとして利用できます。
 
 ## [In preview] Public Preview: Instant Access via application consistent restore points
 
 - 公開日 (UTC): `2026-07-01 16:59:39`
 - リンク: <https://azure.microsoft.com/updates?id=565758>
 
-<!-- TODO: 何が変わるか / 誰に影響するか / どう使い始める・移行するか を 2〜4 行で日本語要約。この行ごと置換すること。原文: Azure introduces Instant Access for VM Restore Points, enabling you to restore disks immediately after a restore point is created—without waiting for background data replication.Key benefits:Faster recovery (lower RTO): Restore disks instantly—no wait for -->
+VM Restore Points の Instant Access プレビューにより、復元ポイント作成後のバックグラウンド複製完了を待たずにディスク復元を開始できます。RTO 短縮を重視する VM 運用チーム向けの機能で、まずは検証環境で復旧手順と制約を確認する段階です。
 
 ## [Launched] Public Preview: Azure Storage Mover now supports migration from Google Cloud Storage (GCS)
 
 - 公開日 (UTC): `2026-07-01 16:56:50`
 - リンク: <https://azure.microsoft.com/updates?id=566948>
 
-<!-- TODO: 何が変わるか / 誰に影響するか / どう使い始める・移行するか を 2〜4 行で日本語要約。この行ごと置換すること。原文: Azure Storage Mover now supports cloud-to-cloud migration of data from Google Cloud Storage (GCS) to Azure Blob Storage, helping organizations simplify multi-cloud consolidation onto Azure.Using the S3-compatible interface, customers can migrate data from -->
+Azure Storage Mover が Google Cloud Storage から Azure Blob Storage へのクラウド間移行をパブリックプレビューでサポートしました。GCS 上のデータを Azure へ集約したい組織は、S3 互換インターフェイスを使った移行検証を始められます。

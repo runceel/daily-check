@@ -4,4 +4,4 @@
 
 > [warn] gh CLI による収集に失敗しました。`gh search prs repo:Azure/azure-functions-dotnet-worker` を手動で実行してから本文を執筆してください。
 
-<!-- TODO: 統計サマリーと PR/Issue 一覧を手動で埋める -->
+収集失敗のため未集計。gh CLI が DNS 監視プロキシでブロックされたため、この期間の統計サマリーと PR/Issue 一覧は自動取得できませんでした。手動確認が必要です。

@@ -4,4 +4,4 @@
 
 > [warn] gh CLI による収集に失敗しました。`gh search prs repo:microsoft/aspire` を手動で実行してから本文を執筆してください。
 
-<!-- TODO: 統計サマリーと PR/Issue 一覧、PR 詳細を手動で埋める -->
+収集失敗のため未集計。gh CLI が DNS 監視プロキシでブロックされたため、この期間の統計サマリー、PR/Issue 一覧、主要 PR 詳細は自動取得できませんでした。手動確認が必要です。
