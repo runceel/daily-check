@@ -7,7 +7,7 @@
 
 重要な前提:
   スクリプト (`scripts/Invoke-DailyCheckReport.ps1`) が `reports/yyyy/MM/dd/`
-  配下に **9 個の単位ファイルの骨組み** を実際に生成します。骨組みには
+  配下に **11 個の単位ファイルの骨組み** を実際に生成します。骨組みには
   `<!-- TODO: ... -->` という HTML コメント形式のマーカーが埋め込まれており、
   エージェントは **そのマーカー行を日本語の解説で置き換える** だけで完成します。
 
@@ -27,7 +27,7 @@
 
 # Daily Check レポート 書式リファレンス
 
-スクリプトが生成する 9 ファイルと、それぞれで埋めるべき内容を示します。
+スクリプトが生成する 11 ファイルと、それぞれで埋めるべき内容を示します。
 並び順・見出し・表スキーマはスクリプト出力に準拠してください（任意に作り替えない）。
 
 | ファイル | 役割 | モード |
@@ -36,11 +36,13 @@
 | `azure.md` | Azure 更新（RSS、期間内のみ） | — |
 | `github-changelog.md` | GitHub Changelog（RSS、期間内のみ） | — |
 | `agent-framework.md` | microsoft/agent-framework | **詳細** |
-| `aspire.md` | microsoft/aspire | **詳細** |
 | `aspnetcore.md` | dotnet/aspnetcore | サマリー |
 | `azure-functions-dotnet-worker.md` | Azure/azure-functions-dotnet-worker | サマリー |
 | `extensions.md` | dotnet/extensions | サマリー |
 | `reactiveproperty.md` | runceel/ReactiveProperty | サマリー |
+| `aspire.md` | microsoft/aspire | **詳細** |
+| `mxc.md` | microsoft/mxc | サマリー |
+| `copilot-sdk.md` | github/copilot-sdk | **詳細** |
 
 ---
 
@@ -51,7 +53,7 @@
 1. **ヘッダ表** — 生成日時 (UTC/JST)・前回チェック時刻・対象期間。書き換え不要。
 2. **単位ファイル一覧表** — 各 `*.md` へのリンク。書き換え不要。
 3. **`## ⚠ 全体の重要な変更（要確認）`** — GitHub リポジトリ群に加え Azure / GitHub
-   Changelog のタイトル・ラベルから自動判定した重要変更（破壊的変更 / セキュリティ /
+   Changelog のタイトル・本文・ラベルから自動判定した重要変更（破壊的変更 / セキュリティ /
    非推奨 / GA）の横断表。列は `種別 | ソース | 参照 | タイトル | 状態`。
    - **これがこのレポートの最重要ブロック**。ここに挙がった項目は、必ず各ファイル
      （リポジトリ別 / azure.md / github-changelog.md）とエグゼクティブサマリーで深掘りすること。
@@ -95,12 +97,12 @@
 
 ---
 
-## 4. 詳細モード（agent-framework.md / aspire.md）
+## 4. 詳細モード（agent-framework.md / aspire.md / copilot-sdk.md）
 
 スクリプトが次の順で生成します:
 
 1. **`## 統計サマリー`** 表（マージ済み/オープン/クローズ PR・Issue・主要コントリビューター）。書き換え不要。
-2. **`## ⚠ 重要な変更（要確認）`** — タイトル/ラベル自動判定の重要 PR/Issue を
+2. **`## ⚠ 重要な変更（要確認）`** — タイトル/本文/ラベル自動判定の重要 PR/Issue を
    重要度順（破壊的 > セキュリティ > 非推奨 > GA）に箇条書き。各項目に
    `<!-- TODO: 影響を1行 -->` が付くので、**誰が何を確認/対応すべきか** を 1 行で補う。
    誤検出はその箇条書き行ごと削除してよい。検出ゼロなら「検出なし」の一文。
@@ -120,7 +122,7 @@
 
 ---
 
-## 5. サマリーモード（aspnetcore / azure-functions-dotnet-worker / extensions / reactiveproperty）
+## 5. サマリーモード（aspnetcore / azure-functions-dotnet-worker / extensions / reactiveproperty / mxc）
 
 スクリプトが次の順で生成します:
 
@@ -140,4 +142,4 @@
    空箇条書きを、受け入れ基準（quality-rules.md 0.5）に従って日本語で埋める。
    事実ファイルが先、`index.md`（統合）が最後に提示される。
 3. `-ValidateOnly`（または `-Status`）で残マーカー・内容問題が無いか検証。
-4. `-Finalize` で `timestamp.md` を index の meta から進め、commit / push。
+4. `-Finalize` で `timestamp.md` を index の meta から進める。commit / push が必要な場合のみ `-Commit` / `-Push` を追加する。

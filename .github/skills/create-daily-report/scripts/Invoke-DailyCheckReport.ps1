@@ -5,12 +5,15 @@ param(
     [switch]$SkipPush,
     [switch]$SkipGitHub,
     [switch]$Finalize,
+    [switch]$Commit,
+    [switch]$Push,
     [switch]$ValidateOnly,
     [switch]$Status,
     [switch]$Next,
     [switch]$Json,
     [switch]$Force,
-    [string]$GeneratedAtUtc
+    [string]$GeneratedAtUtc,
+    [switch]$InternalLoadFunctionsOnly
 )
 
 Set-StrictMode -Version Latest
@@ -28,13 +31,55 @@ $script:RepoConfigs = @(
     [PSCustomObject]@{ Owner='Azure';       Name='azure-functions-dotnet-worker';File='azure-functions-dotnet-worker.md';Mode='summary' },
     [PSCustomObject]@{ Owner='dotnet';      Name='extensions';                   File='extensions.md';                   Mode='summary' },
     [PSCustomObject]@{ Owner='runceel';     Name='ReactiveProperty';             File='reactiveproperty.md';             Mode='summary' },
-    [PSCustomObject]@{ Owner='microsoft';   Name='mxc';                          File='mxc.md';                          Mode='summary' },
     [PSCustomObject]@{ Owner='microsoft';   Name='aspire';                       File='aspire.md';                       Mode='detail' },
+    [PSCustomObject]@{ Owner='microsoft';   Name='mxc';                          File='mxc.md';                          Mode='summary' },
     [PSCustomObject]@{ Owner='github';      Name='copilot-sdk';                  File='copilot-sdk.md';                  Mode='detail' }
 )
 
 # 骨組みに残ってはならない「未執筆」マーカー（-Finalize / -ValidateOnly で検査）
 $script:SkeletonMarkers = @('<!-- TODO', '{{', '原文:')
+
+function Get-UnitFileHeaders {
+    $headers = [ordered]@{
+        'index.md'            = '# 差分レポート'
+        'azure.md'            = '# Azure 更新'
+        'github-changelog.md' = '# GitHub Changelog'
+    }
+    foreach ($cfg in $script:RepoConfigs) {
+        $headers[$cfg.File] = '# ' + $cfg.Owner + '/' + $cfg.Name
+    }
+    return $headers
+}
+
+function Get-IndexUnitRows {
+    $rows = New-Object System.Collections.Generic.List[string]
+    $rows.Add('| Azure 更新 | [azure.md](./azure.md) |') | Out-Null
+    $rows.Add('| GitHub Changelog | [github-changelog.md](./github-changelog.md) |') | Out-Null
+    foreach ($cfg in $script:RepoConfigs) {
+        $repo = $cfg.Owner + '/' + $cfg.Name
+        $rows.Add('| ' + $repo + ' | [' + $cfg.File + '](./' + $cfg.File + ') |') | Out-Null
+    }
+    return $rows.ToArray()
+}
+
+function Resolve-FinalizeGitActions {
+    param(
+        [bool]$CommitRequested,
+        [bool]$PushRequested,
+        [bool]$SkipCommitRequested,
+        [bool]$SkipPushRequested
+    )
+
+    $shouldCommit = $CommitRequested -and -not $SkipCommitRequested
+    $shouldPush = $PushRequested -and -not $SkipPushRequested
+    if ($shouldPush -and -not $shouldCommit) {
+        throw '-Push requires -Commit. Use -Finalize -Commit -Push, or omit both for timestamp-only finalization.'
+    }
+    return [PSCustomObject]@{
+        Commit = $shouldCommit
+        Push   = $shouldPush
+    }
+}
 
 function Get-PreviousCheckAtUtc {
     param([string]$TimestampPath)
@@ -88,6 +133,87 @@ function Save-Utf8File {
     [System.IO.File]::WriteAllText($Path, $content, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+function Invoke-GhSearchWindow {
+    param(
+        [ValidateSet('prs', 'issues')]
+        [string]$Kind,
+        [string]$Repo,
+        [DateTime]$StartDate,
+        [DateTime]$EndDate,
+        [ValidateRange(1, 1000)]
+        [int]$Limit = 1000
+    )
+
+    $dateRange = $StartDate.ToString('yyyy-MM-dd') + '..' + $EndDate.ToString('yyyy-MM-dd')
+    $fields = if ($Kind -eq 'prs') {
+        'number,title,body,author,state,isDraft,createdAt,updatedAt,closedAt,labels,url'
+    } else {
+        'number,title,body,author,state,createdAt,updatedAt,closedAt,labels,url'
+    }
+    $arguments = @('search', $Kind, "repo:$Repo", "updated:$dateRange")
+    if ($Kind -eq 'issues') { $arguments += 'is:issue' }
+    $arguments += @('--limit', [string]$Limit, '--sort', 'updated', '--order', 'desc', '--json', $fields)
+
+    $json = & gh @arguments 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw ('gh search ' + $Kind + ' failed for ' + $Repo + ' (' + $dateRange + ', exit ' + $LASTEXITCODE + ')')
+    }
+
+    $jsonText = ($json -join "`n")
+    $items = @()
+    if (-not [string]::IsNullOrWhiteSpace($jsonText)) {
+        $items = @($jsonText | ConvertFrom-Json)
+    }
+    return [PSCustomObject]@{
+        Items        = @($items)
+        ReachedLimit = (@($items).Count -ge $Limit)
+    }
+}
+
+function Get-GhSearchItems {
+    <#
+      GitHub Search API の 1,000 件上限に達した場合、updated の日付範囲を再帰分割して再取得する。
+      1 日だけで上限に達した場合はこれ以上分割できないため Truncated=$true を返す。
+    #>
+    param(
+        [ValidateSet('prs', 'issues')]
+        [string]$Kind,
+        [string]$Repo,
+        [DateTime]$Since,
+        [DateTime]$Until,
+        [ValidateRange(1, 1000)]
+        [int]$Limit = 1000
+    )
+
+    $startDate = $Since.ToUniversalTime().Date
+    $endDate = $Until.ToUniversalTime().Date
+    if ($endDate -lt $startDate) {
+        throw 'GitHub search end date must not precede the start date.'
+    }
+
+    $window = Invoke-GhSearchWindow -Kind $Kind -Repo $Repo -StartDate $startDate -EndDate $endDate -Limit $Limit
+    if (-not $window.ReachedLimit) {
+        return [PSCustomObject]@{ Items = @($window.Items); Truncated = $false }
+    }
+    if ($startDate -eq $endDate) {
+        return [PSCustomObject]@{ Items = @($window.Items); Truncated = $true }
+    }
+
+    $daySpan = [int]($endDate - $startDate).TotalDays
+    $midpoint = $startDate.AddDays([Math]::Floor($daySpan / 2))
+    $left = Get-GhSearchItems -Kind $Kind -Repo $Repo -Since $startDate -Until $midpoint.AddDays(1).AddTicks(-1) -Limit $Limit
+    $right = Get-GhSearchItems -Kind $Kind -Repo $Repo -Since $midpoint.AddDays(1) -Until $endDate.AddDays(1).AddTicks(-1) -Limit $Limit
+
+    $byNumber = [ordered]@{}
+    foreach ($item in @($left.Items) + @($right.Items)) {
+        $byNumber[[string]$item.number] = $item
+    }
+    return [PSCustomObject]@{
+        Items     = @($byNumber.Values)
+        Truncated = ([bool]$left.Truncated -or [bool]$right.Truncated)
+    }
+}
+
 function Get-RepoActivity {
     <#
       gh search prs / gh search issues を呼び出し、対象期間内に動きのあった
@@ -97,40 +223,24 @@ function Get-RepoActivity {
         [string]$Repo,
         [DateTime]$Since,
         [DateTime]$Until,
-        [int]$Limit = 80,
+        [ValidateRange(1, 1000)]
+        [int]$Limit = 1000,
         [string]$CacheDir
     )
 
-    $sinceDate = $Since.ToUniversalTime().ToString('yyyy-MM-dd')
     $repoSlug = $Repo -replace '/', '_'
 
     $prCache = Join-Path $CacheDir ($repoSlug + '_prs.json')
     $issueCache = Join-Path $CacheDir ($repoSlug + '_issues.json')
 
     try {
-        # stderr は捨てる。混ぜると JSON パース時に化ける（gh のプログレス出力混入対策）
-        $prsJson = & gh search prs "repo:$Repo" "updated:>=$sinceDate" `
-            --limit $Limit `
-            --json number,title,author,state,isDraft,createdAt,updatedAt,closedAt,labels,url 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host ('  [warn] gh search prs failed for ' + $Repo + ' (exit ' + $LASTEXITCODE + ')') -ForegroundColor Yellow
-            return $null
-        }
-        $prsJsonText = ($prsJson -join "`n")
-        $prsJsonText | Set-Content -LiteralPath $prCache -Encoding UTF8
+        $prSearch = Get-GhSearchItems -Kind prs -Repo $Repo -Since $Since -Until $Until -Limit $Limit
+        $issueSearch = Get-GhSearchItems -Kind issues -Repo $Repo -Since $Since -Until $Until -Limit $Limit
+        $prs = @($prSearch.Items)
+        $issues = @($issueSearch.Items)
 
-        $issuesJson = & gh search issues "repo:$Repo" "updated:>=$sinceDate" "is:issue" `
-            --limit $Limit `
-            --json number,title,author,state,createdAt,updatedAt,closedAt,labels,url 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host ('  [warn] gh search issues failed for ' + $Repo + ' (exit ' + $LASTEXITCODE + ')') -ForegroundColor Yellow
-            return $null
-        }
-        $issuesJsonText = ($issuesJson -join "`n")
-        $issuesJsonText | Set-Content -LiteralPath $issueCache -Encoding UTF8
-
-        $prs = $prsJsonText | ConvertFrom-Json
-        $issues = $issuesJsonText | ConvertFrom-Json
+        [System.IO.File]::WriteAllText($prCache, (ConvertTo-Json -InputObject $prs -Depth 20), (New-Object System.Text.UTF8Encoding($false)))
+        [System.IO.File]::WriteAllText($issueCache, (ConvertTo-Json -InputObject $issues -Depth 20), (New-Object System.Text.UTF8Encoding($false)))
     }
     catch {
         Write-Host ('  [warn] gh search exception for ' + $Repo + ': ' + $_.Exception.Message) -ForegroundColor Yellow
@@ -182,7 +292,7 @@ function Get-RepoActivity {
         OpenedPrs          = $openedPrs
         NewIssues          = $newIssues
         ClosedIssues       = $closedIssues
-        Truncated          = (@($prs).Count -ge $Limit -or @($issues).Count -ge $Limit)
+        Truncated          = ([bool]$prSearch.Truncated -or [bool]$issueSearch.Truncated)
         Limit              = $Limit
     }
 }
@@ -261,22 +371,61 @@ function Get-FeedItemText {
     return $text
 }
 
+function Get-ItemBody {
+    param($Item)
+    if ($null -eq $Item -or -not $Item.PSObject.Properties['body']) { return '' }
+    return [string]$Item.body
+}
+
+function Test-AffirmativeBodyMatch {
+    param([string]$Text, [string]$SignalPattern)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    $negationPattern = "\b(?:no|not|never|without|does not|doesn't|is not|isn't|are not|aren't|will not|won't|cannot|can't)\b"
+    $segments = [regex]::Split($Text, '(?m)(?:\r?\n)+|(?<=[.!?])\s+')
+    foreach ($segment in $segments) {
+        if ($segment -match $SignalPattern -and $segment -notmatch $negationPattern) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-ChangeImportance {
     <#
-      PR/Issue のタイトルとラベルから重要度タグを判定する。該当なしは $null。
+      PR/Issue のタイトル、本文、ラベルから重要度タグを判定する。該当なしは $null。
       優先度: 破壊的変更 > セキュリティ > 非推奨/廃止 > GA 昇格。
       自動判定なので誤検出はあり得る（過剰検出の上、執筆者が取捨選択する方針）。
     #>
-    param([string]$Title, $Labels)
+    param([string]$Title, $Labels, [string]$Body = '')
 
-    $hay = [string]$Title
-    if ($Labels) { $hay += ' ' + ((@($Labels) | ForEach-Object { $_.name }) -join ' ') }
-    $hay = $hay.ToLowerInvariant()
+    $headline = [string]$Title
+    if ($Labels) { $headline += ' ' + ((@($Labels) | ForEach-Object { $_.name }) -join ' ') }
+    $headline = $headline.ToLowerInvariant()
+    $bodyText = ([string]$Body).ToLowerInvariant()
 
-    if ($hay -match 'breaking|破壊的|backward[- ]?incompat') { return '⚠ 破壊的変更' }
-    if ($hay -match 'security|vulnerab|\bcve-|セキュリティ|exploit') { return '⚠ セキュリティ' }
-    if ($hay -match 'deprecat|obsolete|retirement|非推奨|廃止') { return '非推奨/廃止' }
-    if ($hay -match 'generally available|\bga\b|\[ga\]|一般提供') { return 'GA 昇格' }
+    # PR templates often contain unchecked "breaking/security" checkboxes. Use broad matching only
+    # for titles/labels, and require explicit prose in bodies to avoid classifying every templated PR.
+    $breakingBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '(?:this|these|the)\s+(?:change|changes|pr)\s+(?:is|are|introduces?|contains?)\s+(?:an?\s+)?breaking change|backward[- ]?incompatible|migration is required'
+    if ($headline -match 'breaking|破壊的|backward[- ]?incompat|remov(?:e|es|ed|ing)\b.{0,80}\bimplicit\b.{0,80}\b(?:package|reference|dependency)\b' -or
+        $breakingBody) {
+        return '⚠ 破壊的変更'
+    }
+    $securityBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '(?:fix(?:es|ed)?|address(?:es|ed)?|remediat(?:e|es|ed)|prevent(?:s|ed)?)\b.{0,120}(?:security vulnerab|path traversal|auth(?:entication|orization)? bypass|credential leak|secret leak|token leak|credential exposure|secret exposure|token exposure|\bcve-)'
+    if ($headline -match 'security|vulnerab|\bcve-|セキュリティ|exploit|path traversal|auth(?:entication|orization)? bypass|policy gaps?|\bdeniedpaths?\b|redact.{0,60}(?:sensitive|credential|secret|token|user info|query|fragment)|(?:credential|secret|token).{0,60}(?:leak|expos|log)' -or
+        $securityBody) {
+        return '⚠ セキュリティ'
+    }
+    $deprecationBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '\b(?:is|are|will be)\s+(?:now\s+)?(?:deprecated|obsolete|retired)|will be removed'
+    if ($headline -match 'deprecat|obsolete|retirement|非推奨|廃止' -or
+        $deprecationBody) {
+        return '非推奨/廃止'
+    }
+    $gaBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '\b(?:is|are)\s+now\s+generally available|has reached ga\b'
+    if ($headline -match 'generally available|\bga\b|\[ga\]|一般提供' -or
+        $gaBody) {
+        return 'GA 昇格'
+    }
     return $null
 }
 
@@ -293,7 +442,7 @@ function Get-ImportantItems {
 
     $seen = @{}
     foreach ($pr in @($Activity.AllPrs)) {
-        $tag = Get-ChangeImportance -Title $pr.title -Labels $pr.labels
+        $tag = Get-ChangeImportance -Title $pr.title -Labels $pr.labels -Body (Get-ItemBody $pr)
         if (-not $tag) { continue }
         $key = 'pr#' + $pr.number
         if ($seen.ContainsKey($key)) { continue }
@@ -304,7 +453,7 @@ function Get-ImportantItems {
         }) | Out-Null
     }
     foreach ($issue in @($Activity.AllIssues)) {
-        $tag = Get-ChangeImportance -Title $issue.title -Labels $issue.labels
+        $tag = Get-ChangeImportance -Title $issue.title -Labels $issue.labels -Body (Get-ItemBody $issue)
         if (-not $tag) { continue }
         $key = 'issue#' + $issue.number
         if ($seen.ContainsKey($key)) { continue }
@@ -345,7 +494,7 @@ function Add-ImportanceSection {
         return
     }
 
-    $Lines.Add('<!-- タイトル/ラベルからの自動判定です。誤検出はこの箇条書きごと削除可。各項目の影響を1行で補い、TODO コメントを消してください。 -->') | Out-Null
+    $Lines.Add('<!-- タイトル/本文/ラベルからの自動判定です。誤検出はこの箇条書きごと削除可。各項目の影響を1行で補い、TODO コメントを消してください。 -->') | Out-Null
     foreach ($it in $Items) {
         $title = ($it.Title -replace '\|', '\|')
         $Lines.Add('- **' + $it.Tag + '** [#' + $it.Number + '](' + $it.Url + ') — ' + $title + ' （' + $it.Kind + ' / ' + $it.State + ' / ' + $it.Author + '）') | Out-Null
@@ -511,11 +660,11 @@ function New-RepoDetailBody {
     if ($mergedPrs.Count -gt 0) {
         $importanceOrder = @{ '⚠ 破壊的変更' = 0; '⚠ セキュリティ' = 1; '非推奨/廃止' = 2; 'GA 昇格' = 3 }
         $importantMergedPrs = @($mergedPrs |
-            Where-Object { Get-ChangeImportance -Title $_.title -Labels $_.labels } |
-            Sort-Object -Stable @{ Expression = { $importanceOrder[(Get-ChangeImportance -Title $_.title -Labels $_.labels)] } }, @{ Expression = { [int]$_.number }; Descending = $true })
+            Where-Object { Get-ChangeImportance -Title $_.title -Labels $_.labels -Body (Get-ItemBody $_) } |
+            Sort-Object -Stable @{ Expression = { $importanceOrder[(Get-ChangeImportance -Title $_.title -Labels $_.labels -Body (Get-ItemBody $_))] } }, @{ Expression = { [int]$_.number }; Descending = $true })
         $regularDetailLimit = [Math]::Max(0, $DetailPrLimit - $importantMergedPrs.Count)
         $regularPrs = @($mergedPrs |
-            Where-Object { -not (Get-ChangeImportance -Title $_.title -Labels $_.labels) } |
+            Where-Object { -not (Get-ChangeImportance -Title $_.title -Labels $_.labels -Body (Get-ItemBody $_)) } |
             Select-Object -First $regularDetailLimit)
         $topPrs = @($importantMergedPrs + $regularPrs)
 
@@ -862,7 +1011,7 @@ function Get-PreviousReportDir {
       現在のレポートを除く「直近の完成済み（残マーカー無し）レポートディレクトリ」を返す。
       未確定のドラフトを誤って継続素材にしないよう、マーカーの残るものはスキップする。無ければ $null。
     #>
-    param([string]$ExcludeDir)
+    param([string]$ExcludeDir, [string[]]$RequiredFiles = @('index.md'))
 
     $excludeFull = $null
     if ($ExcludeDir -and (Test-Path -LiteralPath $ExcludeDir)) {
@@ -873,8 +1022,15 @@ function Get-PreviousReportDir {
     for ($i = $dirs.Count - 1; $i -ge 0; $i--) {
         $d = $dirs[$i]
         if ($excludeFull -and $d -eq $excludeFull) { continue }
-        $idx = Join-Path $d 'index.md'
-        if (@(Get-LeftoverMarkers -Path $idx).Count -gt 0) { continue }  # 未確定はスキップ
+        $isComplete = $true
+        foreach ($file in $RequiredFiles) {
+            $path = Join-Path $d $file
+            if (-not (Test-Path -LiteralPath $path) -or @(Get-FileWorkItems -Path $path).Count -gt 0) {
+                $isComplete = $false
+                break
+            }
+        }
+        if (-not $isComplete) { continue }
         return $d
     }
     return $null
@@ -986,7 +1142,10 @@ function Get-LatestReportDir {
 }
 
 # ===================== Main =====================
+if ($InternalLoadFunctionsOnly) { return }
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+$dryRunRoot = $null
 Push-Location $repoRoot
 try {
     $script:SkippedFiles = New-Object System.Collections.Generic.List[string]
@@ -999,6 +1158,14 @@ try {
     if ($Json -and -not $Next) {
         throw '-Json は -Next と併用してください（他モードでは未対応です）。'
     }
+    if (($Commit -or $Push) -and -not $Finalize) {
+        throw '-Commit / -Push は -Finalize と併用してください。'
+    }
+    $gitActions = Resolve-FinalizeGitActions `
+        -CommitRequested ([bool]$Commit) `
+        -PushRequested ([bool]$Push) `
+        -SkipCommitRequested ([bool]$SkipCommit) `
+        -SkipPushRequested ([bool]$SkipPush)
 
     $nowUtc = if ([string]::IsNullOrWhiteSpace($GeneratedAtUtc)) {
         (Get-Date).ToUniversalTime()
@@ -1021,22 +1188,19 @@ try {
     $month = $nowJst.ToString('MM')
     $day   = $nowJst.ToString('dd')
     $reportDir = Join-Path 'reports' (Join-Path $year (Join-Path $month $day))
-
-    # 単位ファイルと先頭ヘッダの対応（構造検証・finalize 検証に共用）
-    $unitFileHeaders = [ordered]@{
-        'index.md'                          = '# 差分レポート'
-        'azure.md'                          = '# Azure 更新'
-        'github-changelog.md'               = '# GitHub Changelog'
-        'agent-framework.md'                = '# microsoft/agent-framework'
-        'aspnetcore.md'                     = '# dotnet/aspnetcore'
-        'azure-functions-dotnet-worker.md'  = '# Azure/azure-functions-dotnet-worker'
-        'extensions.md'                     = '# dotnet/extensions'
-        'reactiveproperty.md'               = '# runceel/ReactiveProperty'
-        'aspire.md'                         = '# microsoft/aspire'
+    $plannedReportDir = $reportDir
+    $cacheRoot = '.tmp'
+    if ($DryRun -and -not ($Next -or $Status -or $ValidateOnly -or $Finalize)) {
+        $dryRunRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('daily-check-' + [Guid]::NewGuid().ToString('N'))
+        $reportDir = Join-Path $dryRunRoot $plannedReportDir
+        $cacheRoot = Join-Path $dryRunRoot '.tmp'
     }
 
+    # RepoConfigs を唯一のリポジトリ定義として、生成・巡回・検証対象を導出する。
+    $unitFileHeaders = Get-UnitFileHeaders
+
     # -ValidateOnly / -Status / -Next は読み取り専用なので、当日ディレクトリが無ければ最新レポートへフォールバックする。
-    # -Finalize は破壊的（timestamp 更新 + commit/push）なので、別日のレポートを誤って確定しないよう
+    # -Finalize は timestamp を更新するため、別日のレポートを誤って確定しないよう
     # フォールバックしない（当日 or 明示 -GeneratedAtUtc の日付のみを対象にする）。
     $isFallback = $false
     if ($ValidateOnly -or $Status -or $Next) {
@@ -1114,7 +1278,7 @@ try {
         $prevMemoFound = $false
         $impItems = @()
         if ($target -eq 'index.md') {
-            $prevDir = Get-PreviousReportDir -ExcludeDir $reportDir
+            $prevDir = Get-PreviousReportDir -ExcludeDir $reportDir -RequiredFiles @($unitFileHeaders.Keys)
             if ($prevDir) {
                 $prevMemo = Get-NextCheckMemo -IndexPath (Join-Path $prevDir 'index.md')
                 if ($prevMemo) { $prevMemoFound = $true }
@@ -1217,7 +1381,7 @@ try {
         Write-Host ''
         if ($statusPending.Count -eq 0) {
             Write-Host '結果: すべて記入済みです。編集は不要です。' -ForegroundColor Green
-            Write-Host ('次の手順:  pwsh ' + $PSCommandPath + ' -Finalize   （timestamp 更新 + commit/push）')
+            Write-Host ('次の手順:  pwsh ' + $PSCommandPath + ' -Finalize   （timestamp のみ更新。commit/push は明示指定）')
             exit 0
         } else {
             Write-Host ('結果: 編集が必要です。' + $statusPending.Count + ' ファイル / 残り ' + $statusTotal + ' 箇所。') -ForegroundColor Yellow
@@ -1234,9 +1398,14 @@ try {
         }
         $leftoverTotal = 0
         $contentTotal = 0
+        $missingTotal = 0
         foreach ($f in $unitFileHeaders.Keys) {
             $p = Join-Path $reportDir $f
-            if (-not (Test-Path -LiteralPath $p)) { continue }
+            if (-not (Test-Path -LiteralPath $p)) {
+                $missingTotal++
+                Write-Host ('[欠落] ' + $f) -ForegroundColor Red
+                continue
+            }
             $left = Get-LeftoverMarkers -Path $p
             if (@($left).Count -gt 0) {
                 $leftoverTotal += @($left).Count
@@ -1250,14 +1419,14 @@ try {
                 $content | ForEach-Object { Write-Host ('  L' + $_.Line + ': ' + $_.Kind + ' — ' + $_.Text) }
             }
         }
-        if ($leftoverTotal -gt 0 -or $contentTotal -gt 0) {
-            throw ('未完成です。未記入マーカー ' + $leftoverTotal + ' 件 / 内容チェック問題（空箇条書き・プレースホルダ語）' + $contentTotal + ' 件。すべて解消してください。')
+        if ($missingTotal -gt 0 -or $leftoverTotal -gt 0 -or $contentTotal -gt 0) {
+            throw ('未完成です。欠落ファイル ' + $missingTotal + ' 件 / 未記入マーカー ' + $leftoverTotal + ' 件 / 内容チェック問題（空箇条書き・プレースホルダ語）' + $contentTotal + ' 件。すべて解消してください。')
         }
         Write-Host '  すべての単位ファイルが記入済みです（残存マーカー・内容問題なし）。' -ForegroundColor Green
         return
     }
 
-    # ===== -Finalize: 生成は行わず、記入完了を検証して timestamp 更新 + commit/push =====
+    # ===== -Finalize: 生成は行わず、記入完了を検証して timestamp 更新。git 操作は opt-in =====
     if ($Finalize) {
         Write-Host ('Finalizing report under ' + $reportDir + ' ...')
         if (-not (Test-Path -LiteralPath (Join-Path $reportDir 'index.md'))) {
@@ -1306,25 +1475,27 @@ try {
         }
 
         if ($DryRun) {
-            Write-Host ('Dry-run: timestamp.md would be set to ' + $genAt + ' and the report committed.')
+            $gitSummary = if ($gitActions.Push) { 'commit and push' } elseif ($gitActions.Commit) { 'commit' } else { 'no git operation' }
+            Write-Host ('Dry-run: timestamp.md would be set to ' + $genAt + '; ' + $gitSummary + '.')
             return
         }
 
         [System.IO.File]::WriteAllText((Join-Path $repoRoot 'timestamp.md'), $genAt, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host ('timestamp.md updated to ' + $genAt)
 
-        if (-not $SkipCommit) {
+        if ($gitActions.Commit) {
             git add $reportDir 'timestamp.md'
             if ($LASTEXITCODE -ne 0) { throw ('git add に失敗しました (exit ' + $LASTEXITCODE + ')。timestamp.md は更新済みです。解消後に手動で add/commit してください。') }
             $commitMessage = 'Daily check report: ' + $genAt + ' UTC'
             git commit -m $commitMessage
             if ($LASTEXITCODE -ne 0) { throw ('git commit に失敗しました (exit ' + $LASTEXITCODE + ')。timestamp.md は更新済みです。変更内容を確認のうえ手動で commit してください。') }
-            if (-not $SkipPush) {
+            if ($gitActions.Push) {
                 git push
                 if ($LASTEXITCODE -ne 0) { throw ('git push に失敗しました (exit ' + $LASTEXITCODE + ')。commit は完了済みです。ネットワーク等を確認のうえ手動で push してください。') }
             }
         }
-        Write-Host ('Report finalized: ' + $reportDir) -ForegroundColor Green
+        $finalizeSummary = if ($gitActions.Push) { 'timestamp updated, committed, and pushed' } elseif ($gitActions.Commit) { 'timestamp updated and committed' } else { 'timestamp updated; no commit or push' }
+        Write-Host ('Report finalized: ' + $reportDir + ' (' + $finalizeSummary + ')') -ForegroundColor Green
         return
     }
 
@@ -1336,13 +1507,14 @@ try {
         Write-Host '============================================================' -ForegroundColor Red
     }
     Write-Host 'Preparing temporary workspace...'
-    New-Item -ItemType Directory -Force -Path '.tmp' | Out-Null
-    New-Item -ItemType Directory -Force -Path '.tmp/gh' | Out-Null
+    New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+    $githubCacheDir = Join-Path $cacheRoot 'gh'
+    New-Item -ItemType Directory -Force -Path $githubCacheDir | Out-Null
     New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
     Write-Host 'Fetching Azure / GitHub Changelog RSS...'
-    $azureXml = Get-FeedXml -Uri 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss' -OutFile '.tmp/azure-rss.xml'
-    $githubChangelogXml = Get-FeedXml -Uri 'https://github.blog/changelog/feed/' -OutFile '.tmp/github-changelog.xml'
+    $azureXml = Get-FeedXml -Uri 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss' -OutFile (Join-Path $cacheRoot 'azure-rss.xml')
+    $githubChangelogXml = Get-FeedXml -Uri 'https://github.blog/changelog/feed/' -OutFile (Join-Path $cacheRoot 'github-changelog.xml')
 
     $azureItems = @($azureXml.rss.channel.item | Where-Object {
         $pubDate = ConvertTo-UtcDateTime -Value (Get-XmlChildText $_ 'pubDate') -Fallback ([DateTime]::MinValue)
@@ -1424,13 +1596,13 @@ try {
             $activity = $null
             Write-Host '  (-SkipGitHub: gh CLI is bypassed)'
         } else {
-            $activity = Get-RepoActivity -Repo $repoSlug -Since $previousCheckAtUtc -Until $nowUtc -CacheDir '.tmp/gh'
+            $activity = Get-RepoActivity -Repo $repoSlug -Since $previousCheckAtUtc -Until $nowUtc -CacheDir $githubCacheDir
         }
 
         $important = @()
         if ($activity) {
             if ($activity.Truncated) {
-                Write-Host ('  [warn] ' + $repoSlug + ': 取得件数が上限 (' + $activity.Limit + ') に達しました。重要項目が漏れている可能性があります。') -ForegroundColor Yellow
+                Write-Host ('  [warn] ' + $repoSlug + ': 1 日の取得件数が GitHub Search 上限 (' + $activity.Limit + ') に達しました。重要項目が漏れている可能性があります。') -ForegroundColor Yellow
             }
             $important = @(Get-ImportantItems -Activity $activity)
             foreach ($it in $important) {
@@ -1461,21 +1633,16 @@ try {
     $indexLines.Add('') | Out-Null
     $indexLines.Add('| 単位 | ファイル |') | Out-Null
     $indexLines.Add('| --- | --- |') | Out-Null
-    $indexLines.Add('| Azure 更新 | [azure.md](./azure.md) |') | Out-Null
-    $indexLines.Add('| GitHub Changelog | [github-changelog.md](./github-changelog.md) |') | Out-Null
-    $indexLines.Add('| microsoft/agent-framework | [agent-framework.md](./agent-framework.md) |') | Out-Null
-    $indexLines.Add('| dotnet/aspnetcore | [aspnetcore.md](./aspnetcore.md) |') | Out-Null
-    $indexLines.Add('| Azure/azure-functions-dotnet-worker | [azure-functions-dotnet-worker.md](./azure-functions-dotnet-worker.md) |') | Out-Null
-    $indexLines.Add('| dotnet/extensions | [extensions.md](./extensions.md) |') | Out-Null
-    $indexLines.Add('| runceel/ReactiveProperty | [reactiveproperty.md](./reactiveproperty.md) |') | Out-Null
-    $indexLines.Add('| microsoft/aspire | [aspire.md](./aspire.md) |') | Out-Null
+    foreach ($row in Get-IndexUnitRows) {
+        $indexLines.Add($row) | Out-Null
+    }
     $indexLines.Add('') | Out-Null
 
     # 横断重要サマリー（GitHub リポジトリ群 + Azure / GitHub Changelog から自動集約）
     $indexLines.Add('## ⚠ 全体の重要な変更（要確認）') | Out-Null
     $indexLines.Add('') | Out-Null
     if ($allImportant.Count -gt 0 -or $feedImportant.Count -gt 0) {
-        $indexLines.Add('GitHub リポジトリ群と Azure / GitHub Changelog のタイトル・ラベルから自動判定した重要変更です。各ファイルで詳細と影響を必ず記述してください（自動判定のため過剰検出あり。無関係な行は削除可）。') | Out-Null
+        $indexLines.Add('GitHub リポジトリ群と Azure / GitHub Changelog のタイトル・本文・ラベルから自動判定した重要変更です。各ファイルで詳細と影響を必ず記述してください（自動判定のため過剰検出あり。無関係な行は削除可）。') | Out-Null
         $indexLines.Add('') | Out-Null
         $indexLines.Add('| 種別 | ソース | 参照 | タイトル | 状態 |') | Out-Null
         $indexLines.Add('| ---- | ------ | ---- | -------- | ---- |') | Out-Null
@@ -1522,10 +1689,10 @@ try {
         $marker = if ($f -eq 'index.md') { $expectedDateMarker } else { '' }
         Test-OutputFile -Path (Join-Path $reportDir $f) -ExpectedHeaderPrefix $unitFileHeaders[$f] -RequiredMarker $marker
     }
-    Write-Host '  All 9 output files passed structure validation.' -ForegroundColor Green
+    Write-Host ('  All ' + $unitFileHeaders.Count + ' output files passed structure validation.') -ForegroundColor Green
 
     if ($DryRun) {
-        Write-Host ('Dry-run complete. Report skeleton would be under ' + $reportDir)
+        Write-Host ('Dry-run complete. Report skeleton would be under ' + $plannedReportDir + '; no repository files were changed.')
         return
     }
 
@@ -1540,9 +1707,13 @@ try {
     Write-Host '     提示されたファイルの <!-- TODO ... --> と空箇条書きを、受け入れ基準に従って日本語で埋める'
     Write-Host ('  2) 編集後、再度 -Next。「残作業なし」になるまで 1〜2 を繰り返す（事実ファイル → 最後に index.md の順で提示）')
     Write-Host ('  3) 検証:  pwsh ' + $PSCommandPath + ' -ValidateOnly   （任意。-Status で進捗一覧も可）')
-    Write-Host ('  4) 確定 (timestamp 更新 + commit/push):  pwsh ' + $PSCommandPath + ' -Finalize')
+    Write-Host ('  4) 確定 (timestamp 更新のみ):  pwsh ' + $PSCommandPath + ' -Finalize')
+    Write-Host ('     commit/push も行う場合:  pwsh ' + $PSCommandPath + ' -Finalize -Commit -Push')
     Write-Host '     ※ 既定の再実行では記入済みファイルは保護され、timestamp 更新・commit は行いません。'
 }
 finally {
     Pop-Location
+    if ($dryRunRoot -and (Test-Path -LiteralPath $dryRunRoot)) {
+        Remove-Item -LiteralPath $dryRunRoot -Recurse -Force
+    }
 }

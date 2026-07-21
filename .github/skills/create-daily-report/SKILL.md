@@ -16,6 +16,13 @@ Data collection and scaffolding are deterministic in `Invoke-DailyCheckReport.ps
 
 When replacing `<!-- TODO ... -->` markers in report files, always write natural Japanese explanations.
 
+## Prerequisites
+
+- PowerShell 7 (`pwsh`)
+- GitHub CLI (`gh`) authenticated for public repository search (`gh auth status`)
+- Network access to GitHub, GitHub Changelog RSS, and Azure release-announcement RSS
+- Repository write access for report generation; Git credentials and a configured remote only when `-Commit` / `-Push` are explicitly requested
+
 ## When to use
 
 Use this skill when the user asks for daily-check updates or incremental diffs, for example:
@@ -28,11 +35,12 @@ Use this skill when the user asks for daily-check updates or incremental diffs, 
 
 ## Deliverables
 
-1. Generate/fill files under `reports/{yyyy}/{MM}/{dd}/`:
+1. Generate/fill these 11 files under `reports/{yyyy}/{MM}/{dd}/`:
    `index.md`, `azure.md`, `github-changelog.md`, `agent-framework.md`, `aspnetcore.md`,
-   `azure-functions-dotnet-worker.md`, `extensions.md`, `reactiveproperty.md`, `aspire.md`
+   `azure-functions-dotnet-worker.md`, `extensions.md`, `reactiveproperty.md`, `aspire.md`,
+   `mxc.md`, `copilot-sdk.md`
 2. Update repository-root `timestamp.md` with generation timestamp (UTC, `yyyy-MM-dd HH:mm:ss`) **only in `-Finalize`**
-3. Optionally commit/push report + timestamp in `-Finalize` (or skip with flags)
+3. Optionally commit/push report + timestamp only when `-Commit` / `-Push` are explicitly supplied
 
 ## Workflow (3 phases)
 
@@ -90,19 +98,27 @@ pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -S
 pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -ValidateOnly
 ```
 
-### 4. Finalize (validate + timestamp + commit/push)
+### 4. Finalize (validate + timestamp)
 
 ```pwsh
 pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -Finalize
 ```
 
-`-Finalize` does not regenerate files. It validates unresolved markers/content quality checks, advances `timestamp.md` using `index.md` meta, then commits/pushes unless skipped.
+`-Finalize` does not regenerate files. It validates unresolved markers/content quality checks and advances `timestamp.md` using `index.md` meta. Git operations are opt-in:
+
+```pwsh
+# Timestamp + commit
+pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -Finalize -Commit
+
+# Timestamp + commit + push
+pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -Finalize -Commit -Push
+```
 
 ## Loop safety
 
 - Detect no-progress loops with `fingerprint` from `-Next`:
   same file + same fingerprint after edits means no progress.
-- Practical loop cap: around `number_of_files + 3` iterations (about 12 max).
+- Practical loop cap: around `number_of_files + 3` iterations (about 14 max).
 - If `-Next` returns `missing-file`, rerun default generation (without `-Force`).
 
 ## Authoring guardrails
@@ -124,6 +140,8 @@ pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -F
 | `Azure/azure-functions-dotnet-worker` | summary | `azure-functions-dotnet-worker.md` |
 | `dotnet/extensions` | summary | `extensions.md` |
 | `runceel/ReactiveProperty` | summary | `reactiveproperty.md` |
+| `microsoft/mxc` | summary | `mxc.md` |
+| `github/copilot-sdk` | detailed | `copilot-sdk.md` |
 
 ## Script options
 
@@ -132,20 +150,46 @@ pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -F
 - `-Json`: JSON output for `-Next`
 - `-Status`: status summary (read-only), exit `0/1/2`
 - `-ValidateOnly`: validate markers/content checks only
-- `-Finalize`: validate + timestamp update + commit/push
+- `-Finalize`: validate + timestamp update; no git operation by default
+- `-Commit`: with `-Finalize`, commit report + timestamp
+- `-Push`: with `-Finalize -Commit`, push the created commit
 - `-Force`: force scaffold regeneration ignoring completed-file protection
 - `-DryRun`: no file updates, no commit/push
-- `-SkipCommit`: skip commit during finalize
-- `-SkipPush`: skip push during finalize
+- `-SkipCommit`: compatibility suppression switch; normally unnecessary because commit is opt-in
+- `-SkipPush`: compatibility suppression switch; normally unnecessary because push is opt-in
 - `-SkipGitHub`: skip `gh` calls (offline/rate-limit mode)
 - `-GeneratedAtUtc "yyyy-MM-dd HH:mm:ss"`: override generation timestamp (UTC);
   report folder/title date is based on JST conversion of this UTC value
 
 `-Next`, `-Status`, `-ValidateOnly`, and `-Finalize` are mutually exclusive.
 
-## Related files
+## Error handling
+
+| Failure | Action |
+| --- | --- |
+| `gh` authentication/search failure | Run `gh auth status` / `gh auth login`, then regenerate without `-Force`; completed files remain protected. |
+| RSS/network failure | Retry after connectivity is restored. Do not advance `timestamp.md` from a partial scaffold. |
+| GitHub Search reaches 1,000 items in one day | Treat the repository warning as incomplete data and manually inspect important merged PRs/issues before writing `index.md`. |
+| `missing-file` from `-Next` | Rerun scaffold generation without `-Force`; the script recreates only missing/incomplete files. |
+| `-ValidateOnly` / `-Finalize` failure | Fix every reported missing file, marker, empty bullet, or placeholder and rerun validation. |
+| Commit/push failure | `timestamp.md` may already be updated; inspect `git status` and complete the requested git operation manually without regenerating. |
+
+## Maintenance tests
+
+```pwsh
+Invoke-Pester ./.github/skills/create-daily-report/tests/Invoke-DailyCheckReport.Tests.ps1
+```
+
+The tests enforce repository/file/index consistency, important-change heuristics, search-window splitting, and opt-in git behavior.
+
+## Post-run reflection
+
+After finalization, note any manually discovered important change, collection gap, false-positive classifier result, or source-list drift. Update the classifier/source-of-truth tests before the next run when the same failure could recur.
+
+## References
 
 - [`./references/report-template.md`](./references/report-template.md): canonical report format reference
 - [`./references/quality-rules.md`](./references/quality-rules.md): acceptance criteria and writing quality rules
+- [`./tests/Invoke-DailyCheckReport.Tests.ps1`](./tests/Invoke-DailyCheckReport.Tests.ps1): regression tests
 - `timestamp.md` at repo root: previous checkpoint timestamp
 - `.tmp/` at repo root: temporary RSS/XML/JSON artifacts
