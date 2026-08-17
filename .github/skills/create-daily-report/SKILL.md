@@ -35,8 +35,9 @@ Use this skill when the user asks for daily-check updates or incremental diffs, 
 
 ## Deliverables
 
-1. Generate/fill these 11 files under `reports/{yyyy}/{MM}/{dd}/`:
-   `index.md`, `azure.md`, `github-changelog.md`, `agent-framework.md`, `aspnetcore.md`,
+1. Generate/fill these 12 files under `reports/{yyyy}/{MM}/{dd}/`:
+   `index.md`, `azure.md`, `github-changelog.md`, `agent-framework.md`,
+   `agent-framework-durable-extension.md`, `aspnetcore.md`,
    `azure-functions-dotnet-worker.md`, `extensions.md`, `reactiveproperty.md`, `aspire.md`,
    `mxc.md`, `copilot-sdk.md`
 2. Update repository-root `timestamp.md` with generation timestamp (UTC, `yyyy-MM-dd HH:mm:ss`) **only in `-Finalize`**
@@ -135,6 +136,7 @@ pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -F
 | owner/repo | mode | output file |
 | --- | --- | --- |
 | `microsoft/agent-framework` | detailed | `agent-framework.md` |
+| `microsoft/agent-framework-durable-extension` | detailed | `agent-framework-durable-extension.md` |
 | `microsoft/aspire` | detailed | `aspire.md` |
 | `dotnet/aspnetcore` | summary | `aspnetcore.md` |
 | `Azure/azure-functions-dotnet-worker` | summary | `azure-functions-dotnet-worker.md` |

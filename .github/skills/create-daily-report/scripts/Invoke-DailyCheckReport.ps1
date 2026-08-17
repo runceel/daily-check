@@ -27,6 +27,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # 対象リポジトリ定義（収集モードと出力ファイル名）
 $script:RepoConfigs = @(
     [PSCustomObject]@{ Owner='microsoft';   Name='agent-framework';              File='agent-framework.md';              Mode='detail' },
+    [PSCustomObject]@{ Owner='microsoft';   Name='agent-framework-durable-extension'; File='agent-framework-durable-extension.md'; Mode='detail' },
     [PSCustomObject]@{ Owner='dotnet';      Name='aspnetcore';                   File='aspnetcore.md';                   Mode='summary' },
     [PSCustomObject]@{ Owner='Azure';       Name='azure-functions-dotnet-worker';File='azure-functions-dotnet-worker.md';Mode='summary' },
     [PSCustomObject]@{ Owner='dotnet';      Name='extensions';                   File='extensions.md';                   Mode='summary' },
@@ -299,7 +300,7 @@ function Get-RepoActivity {
 
 function Get-PrDetail {
     <#
-      gh pr view で詳細メタデータを取得する（agent-framework の詳細モード用）。
+      gh pr view で詳細メタデータを取得する（詳細モード用）。
     #>
     param([string]$Repo, [int]$PrNumber)
 
@@ -593,7 +594,7 @@ function New-RepoSummaryBody {
 
 function New-RepoDetailBody {
     <#
-      詳細モード用 (agent-framework)。マージされた PR について gh pr view で
+      詳細モード用。マージされた PR について gh pr view で
       変更ファイル一覧と差分行数、コミット一覧を取得し、<details> ブロックに展開する。
     #>
     param(

@@ -24,7 +24,7 @@
   - **`gh search prs` / `gh search issues` で各リポジトリの PR / Issue を取得し、統計表と一覧表を骨組みに埋める**
   - GitHub Search は 1,000 件まで取得し、上限到達時は日付範囲を再帰分割する。1 日だけで 1,000 件に達した場合のみ truncation 警告を出す
   - **PR/Issue のタイトル・本文・ラベルから重要度（破壊的変更 / セキュリティ / 非推奨 / GA）を自動判定し、各ファイルと index に「重要な変更」セクションを起こす**
-  - **`microsoft/agent-framework`、`microsoft/aspire`、`github/copilot-sdk`（詳細モード）の主要 PR について `gh pr view` で変更ファイル一覧 / コミットを `<details>` ブロックに事前展開する**。重要度付きのマージ済み PR は件数制限の対象外として全件展開し、通常 PR は合計 6 件程度まで補完する
+  - **`microsoft/agent-framework`、`microsoft/agent-framework-durable-extension`、`microsoft/aspire`、`github/copilot-sdk`（詳細モード）の主要 PR について `gh pr view` で変更ファイル一覧 / コミットを `<details>` ブロックに事前展開する**。重要度付きのマージ済み PR は件数制限の対象外として全件展開し、通常 PR は合計 6 件程度まで補完する
   - `reports/{yyyy}/{MM}/{dd}/` のディレクトリ作成と分割ユニットファイルの **骨組み** 生成
   - 出力ファイルの先頭行・既知マーカーを読み戻して **エンコーディング / 改行整形を検証** する
   - `-Finalize` 時のみ `timestamp.md` を更新する。commit / push は `-Commit` / `-Push` が明示された場合だけ行う
@@ -32,7 +32,7 @@
   - スクリプトが生成した骨組みの上に、`./report-template.md` の構造と HINT に従って **日本語の解説本文** を書く
   - 各ファイル冒頭の **「⚠ 重要な変更（要確認）」** を最優先で埋める（影響を 1 行補う／誤検出は箇条書きごと削除）
   - Azure 更新は各項目に **2〜4 行の日本語概要** を付ける（原文の直訳ではなく「何が変わるか」「誰に影響するか」「どう移行するか」が分かるように）
-  - `microsoft/agent-framework`、`microsoft/aspire`、`github/copilot-sdk` は **詳細モード** で、API 変化・破壊的変更・コミットレベルの差分まで書く（変更ファイル一覧はスクリプトが事前展開済み）。重要度付き PR は 6 件上限の外側で全件確認する。加えて **「## このリポジトリの要点」** にリポジトリ全体の要点を 2〜4 行で書き、index 統合の素材にする
+  - `microsoft/agent-framework`、`microsoft/agent-framework-durable-extension`、`microsoft/aspire`、`github/copilot-sdk` は **詳細モード** で、API 変化・破壊的変更・コミットレベルの差分まで書く（変更ファイル一覧はスクリプトが事前展開済み）。重要度付き PR は 6 件上限の外側で全件確認する。加えて **「## このリポジトリの要点」** にリポジトリ全体の要点を 2〜4 行で書き、index 統合の素材にする
   - `dotnet/aspnetcore`、`Azure/azure-functions-dotnet-worker`、`dotnet/extensions`、`runceel/ReactiveProperty`、`microsoft/mxc` はサマリーモードで主要変更を 3〜8 行にまとめる
   - エグゼクティブサマリー / 主要トレンド / 次回チェックメモを必ず埋める
 
@@ -105,7 +105,7 @@
 - [ ] `./report-template.md` の構造に沿って各ユニットファイルを埋めた
 - [ ] Azure / GitHub Changelog の各項目に日本語解説が付いている（告知か要対応かを区別。`<!-- TODO: ... -->` マーカーが残っていない）
 - [ ] 各サマリーリポジトリの「主要な変更点」が 3〜8 行で埋まっている
-- [ ] `microsoft/agent-framework`、`microsoft/aspire`、`github/copilot-sdk` に API 変化 / 破壊的変更 / コミットレベル差分が書かれ、**「このリポジトリの要点」** も埋まっている
+- [ ] `microsoft/agent-framework`、`microsoft/agent-framework-durable-extension`、`microsoft/aspire`、`github/copilot-sdk` に API 変化 / 破壊的変更 / コミットレベル差分が書かれ、**「このリポジトリの要点」** も埋まっている
 - [ ] エグゼクティブサマリー（3〜5 件）と主要トレンドが埋まっている（静かな日は無理に作らず、その旨を明記）
 - [ ] 「次回チェックに向けたメモ」が埋まっている（`-Next` が提示した前回メモを引き継いだ）
 - [ ] 残ってはいけないマーカー（`<!-- TODO` ／ `{{` ／ `原文:`）が無い。`index.md` 末尾の `<!-- daily-check-meta: ... -->` は残す

@@ -7,7 +7,7 @@
 
 重要な前提:
   スクリプト (`scripts/Invoke-DailyCheckReport.ps1`) が `reports/yyyy/MM/dd/`
-  配下に **11 個の単位ファイルの骨組み** を実際に生成します。骨組みには
+  配下に **12 個の単位ファイルの骨組み** を実際に生成します。骨組みには
   `<!-- TODO: ... -->` という HTML コメント形式のマーカーが埋め込まれており、
   エージェントは **そのマーカー行を日本語の解説で置き換える** だけで完成します。
 
@@ -36,6 +36,7 @@
 | `azure.md` | Azure 更新（RSS、期間内のみ） | — |
 | `github-changelog.md` | GitHub Changelog（RSS、期間内のみ） | — |
 | `agent-framework.md` | microsoft/agent-framework | **詳細** |
+| `agent-framework-durable-extension.md` | microsoft/agent-framework-durable-extension | **詳細** |
 | `aspnetcore.md` | dotnet/aspnetcore | サマリー |
 | `azure-functions-dotnet-worker.md` | Azure/azure-functions-dotnet-worker | サマリー |
 | `extensions.md` | dotnet/extensions | サマリー |
@@ -97,7 +98,7 @@
 
 ---
 
-## 4. 詳細モード（agent-framework.md / aspire.md / copilot-sdk.md）
+## 4. 詳細モード（agent-framework.md / agent-framework-durable-extension.md / aspire.md / copilot-sdk.md）
 
 スクリプトが次の順で生成します:
 
