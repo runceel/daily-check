@@ -35,11 +35,11 @@ Use this skill when the user asks for daily-check updates or incremental diffs, 
 
 ## Deliverables
 
-1. Generate/fill these 12 files under `reports/{yyyy}/{MM}/{dd}/`:
+1. Generate/fill these 13 files under `reports/{yyyy}/{MM}/{dd}/`:
    `index.md`, `azure.md`, `github-changelog.md`, `agent-framework.md`,
    `agent-framework-durable-extension.md`, `aspnetcore.md`,
    `azure-functions-dotnet-worker.md`, `extensions.md`, `reactiveproperty.md`, `aspire.md`,
-   `mxc.md`, `copilot-sdk.md`
+   `mxc.md`, `copilot-sdk.md`, `azure-functions-agents-runtime.md`
 2. Update repository-root `timestamp.md` with generation timestamp (UTC, `yyyy-MM-dd HH:mm:ss`) **only in `-Finalize`**
 3. Optionally commit/push report + timestamp only when `-Commit` / `-Push` are explicitly supplied
 
@@ -144,6 +144,7 @@ pwsh ./.github/skills/create-daily-report/scripts/Invoke-DailyCheckReport.ps1 -F
 | `runceel/ReactiveProperty` | summary | `reactiveproperty.md` |
 | `microsoft/mxc` | summary | `mxc.md` |
 | `github/copilot-sdk` | detailed | `copilot-sdk.md` |
+| `Azure/azure-functions-agents-runtime` | detailed | `azure-functions-agents-runtime.md` |
 
 ## Script options
 

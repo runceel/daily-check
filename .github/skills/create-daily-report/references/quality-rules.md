@@ -25,7 +25,7 @@
   - GitHub Search は 1,000 件まで取得し、上限到達時は日付範囲を再帰分割する。1 日だけで 1,000 件に達した場合のみ truncation 警告を出す
   - **PR/Issue のタイトル・本文・ラベルから重要度（破壊的変更 / セキュリティ / 非推奨 / GA）を自動判定し、各ファイルと index に「重要な変更」セクションを起こす**
   - **`microsoft/agent-framework`、`microsoft/agent-framework-durable-extension`、`microsoft/aspire`、`github/copilot-sdk`（詳細モード）の主要 PR について `gh pr view` で変更ファイル一覧 / コミットを `<details>` ブロックに事前展開する**。重要度付きのマージ済み PR は件数制限の対象外として全件展開し、通常 PR は合計 6 件程度まで補完する
-  - `reports/{yyyy}/{MM}/{dd}/` のディレクトリ作成と分割ユニットファイルの **骨組み** 生成
+  - `reports/{yyyy}/{MM}/{dd}/` のディレクトリ作成と分割ユニットファイルの **骨組み** 生成。詳細モードには `Azure/azure-functions-agents-runtime` を含む
   - 出力ファイルの先頭行・既知マーカーを読み戻して **エンコーディング / 改行整形を検証** する
   - `-Finalize` 時のみ `timestamp.md` を更新する。commit / push は `-Commit` / `-Push` が明示された場合だけ行う
 - Skill (エージェント) の責務:
@@ -112,3 +112,5 @@
 - [ ] **空の箇条書き（`- ` だけの行）やプレースホルダ語が残っていない**（`-ValidateOnly` の内容チェックを通る）
 - [ ] `-ValidateOnly` が成功した（残マーカー・内容問題なし）
 - [ ] `-Finalize` で `timestamp.md` を更新した。commit / push が必要な依頼では `-Commit` / `-Push` を明示した
+
+`Azure/azure-functions-agents-runtime` は詳細モードの監視対象であり、主要 PR の API 変化・破壊的変更・コミットレベル差分・既存利用者への影響を確認する。

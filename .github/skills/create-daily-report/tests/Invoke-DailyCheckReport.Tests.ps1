@@ -5,7 +5,7 @@ Describe 'daily report source of truth' {
     It 'derives all required files from RepoConfigs' {
         $headers = Get-UnitFileHeaders
 
-        $headers.Count | Should Be 12
+        $headers.Count | Should Be 13
         foreach ($config in $script:RepoConfigs) {
             $headers.Contains($config.File) | Should Be $true
             $headers[$config.File] | Should Be ('# ' + $config.Owner + '/' + $config.Name)
@@ -28,12 +28,23 @@ Describe 'daily report source of truth' {
         $skill = Get-Content -LiteralPath $skillPath -Raw
         $template = Get-Content -LiteralPath $templatePath -Raw
 
-        $skill | Should Match '12 files'
-        $template | Should Match '12 個'
+        $skill | Should Match '13 files'
+        $template | Should Match '13 個'
         foreach ($config in $script:RepoConfigs) {
             $skill | Should Match ([regex]::Escape($config.File))
             $template | Should Match ([regex]::Escape($config.File))
         }
+
+    }
+
+    It 'configures the agents runtime repository for detailed reporting' {
+        $config = $script:RepoConfigs | Where-Object {
+            $_.Owner -eq 'Azure' -and $_.Name -eq 'azure-functions-agents-runtime'
+        }
+
+        $config | Should Not BeNullOrEmpty
+        $config.File | Should Be 'azure-functions-agents-runtime.md'
+        $config.Mode | Should Be 'detail'
     }
 }
 

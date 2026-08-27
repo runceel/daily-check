@@ -34,7 +34,8 @@ $script:RepoConfigs = @(
     [PSCustomObject]@{ Owner='runceel';     Name='ReactiveProperty';             File='reactiveproperty.md';             Mode='summary' },
     [PSCustomObject]@{ Owner='microsoft';   Name='aspire';                       File='aspire.md';                       Mode='detail' },
     [PSCustomObject]@{ Owner='microsoft';   Name='mxc';                          File='mxc.md';                          Mode='summary' },
-    [PSCustomObject]@{ Owner='github';      Name='copilot-sdk';                  File='copilot-sdk.md';                  Mode='detail' }
+    [PSCustomObject]@{ Owner='github';      Name='copilot-sdk';                  File='copilot-sdk.md';                  Mode='detail' },
+    [PSCustomObject]@{ Owner='Azure';       Name='azure-functions-agents-runtime'; File='azure-functions-agents-runtime.md'; Mode='detail' }
 )
 
 # 骨組みに残ってはならない「未執筆」マーカー（-Finalize / -ValidateOnly で検査）
