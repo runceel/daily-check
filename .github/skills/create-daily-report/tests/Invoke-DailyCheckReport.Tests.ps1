@@ -89,6 +89,28 @@ Describe 'important change classification' {
         $result = Get-ChangeImportance -Title 'Update documentation' -Body 'This release does not fix a security vulnerability.' -Labels @()
         $result | Should BeNullOrEmpty
     }
+
+    It 'detects an obsolete public AppHost API' {
+        Get-ChangeImportance -Title 'Obsolete AddCSharpApp in favor of AddDotnetProject' -Labels @() |
+            Should Be '非推奨/廃止'
+    }
+
+    It 'does not classify obsolete issue-template links as a product deprecation' {
+        $result = Get-ChangeImportance -Title 'Remove obsolete ASP.NET policy links from issue templates' -Labels @()
+        $result | Should BeNullOrEmpty
+    }
+
+    It 'does not classify retiring runtime resources as a deprecated API' {
+        $body = 'Removed-root caches/watchers are retired while the workspace is rediscovered.'
+        $result = Get-ChangeImportance -Title 'Show AppHosts from every VS Code workspace root' -Body $body -Labels @()
+        $result | Should BeNullOrEmpty
+    }
+
+    It 'does not classify retired integration connections as a product deprecation' {
+        $body = 'Retire the connection and clean up the old process scope before recovery.'
+        $result = Get-ChangeImportance -Title 'Add polyglot hosting integrations through ATS projection' -Body $body -Labels @()
+        $result | Should BeNullOrEmpty
+    }
 }
 
 Describe 'GitHub search windowing' {
