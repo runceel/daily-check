@@ -401,15 +401,24 @@ function Get-ChangeImportance {
     #>
     param([string]$Title, $Labels, [string]$Body = '')
 
+    if ($Title -match '^\s*\[repo-pulse\]\s*Daily Report\b') { return $null }
+
     $headline = [string]$Title
-    if ($Labels) { $headline += ' ' + ((@($Labels) | ForEach-Object { $_.name }) -join ' ') }
+    $labelText = ''
+    if ($Labels) {
+        $labelText = (@($Labels) | ForEach-Object { $_.name }) -join ' '
+        $headline += ' ' + $labelText
+    }
     $headline = $headline.ToLowerInvariant()
     $bodyText = ([string]$Body).ToLowerInvariant()
 
     # PR templates often contain unchecked "breaking/security" checkboxes. Use broad matching only
     # for titles/labels, and require explicit prose in bodies to avoid classifying every templated PR.
     $breakingBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '(?:this|these|the)\s+(?:change|changes|pr)\s+(?:is|are|introduces?|contains?)\s+(?:an?\s+)?breaking change|backward[- ]?incompatible|migration is required'
-    if ($headline -match 'breaking|破壊的|backward[- ]?incompat|remov(?:e|es|ed|ing)\b.{0,80}\bimplicit\b.{0,80}\b(?:package|reference|dependency)\b' -or
+    $breakingTitle = $headline -match 'breaking|破壊的|backward[- ]?incompat|remov(?:e|es|ed|ing)\b.{0,80}\bimplicit\b.{0,80}\b(?:package|reference|dependency)\b'
+    $breakingPreventedByTitle = $headline -match '\b(?:prevent|avoid|stop)\b.{0,80}\bfrom\s+breaking\b'
+    $breakingLabel = $labelText -match 'breaking|破壊的|backward[- ]?incompat'
+    if (($breakingTitle -and -not $breakingPreventedByTitle) -or $breakingLabel -or
         $breakingBody) {
         return '⚠ 破壊的変更'
     }

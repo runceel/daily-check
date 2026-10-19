@@ -54,6 +54,17 @@ Describe 'important change classification' {
             Should Be '⚠ 破壊的変更'
     }
 
+    It 'does not classify a title that prevents breakage as a breaking change' {
+        Get-ChangeImportance -Title 'Prevent Edge compatibility relaunch from breaking browser debugging' -Labels @() |
+            Should BeNullOrEmpty
+    }
+
+    It 'does not classify repo-pulse daily reports from their generated body text' {
+        $body = 'This report summarizes retired and deprecated APIs across the repository.'
+        Get-ChangeImportance -Title '[repo-pulse] Daily Report' -Body $body -Labels @() |
+            Should BeNullOrEmpty
+    }
+
     It 'detects sensitive log redaction as security' {
         Get-ChangeImportance -Title 'fix(sdk): redact sensitive info from ZipDeploy logs' -Labels @() |
             Should Be '⚠ セキュリティ'
