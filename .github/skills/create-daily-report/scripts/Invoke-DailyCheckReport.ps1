@@ -427,9 +427,15 @@ function Get-ChangeImportance {
         $securityBody) {
         return '⚠ セキュリティ'
     }
-    $deprecationBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '(?:\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint|workflowagent|apphost|addcsharpapp)\b.{0,100}\b(?:is|are|will be)\s+(?:now\s+)?(?:deprecated|obsolete|retired)|\b(?:deprecated|obsolete|retired)\b.{0,100}\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint|workflowagent|apphost|addcsharpapp)\b|\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint)\b.{0,100}\bwill be removed)'
-    if ($headline -match 'deprecat|retirement|非推奨|廃止|obsolete.{0,80}\b(?:api|sdk|apphost|addcsharpapp|workflowagent|method|property|option|endpoint)\b' -or
-        $deprecationBody) {
+    $openApiAnnotationLeak = $headline -match '\bleak\b.{0,100}\b(?:obsolete|deprecated)\b.{0,100}\bopenapi\b'
+    $deprecationBody = if ($openApiAnnotationLeak) {
+        $false
+    } else {
+        Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '(?:\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint|workflowagent|apphost|addcsharpapp)\b.{0,100}\b(?:is|are|will be)\s+(?:now\s+)?(?:deprecated|obsolete|retired)|\b(?:deprecated|obsolete|retired)\b.{0,100}\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint|workflowagent|apphost|addcsharpapp)\b|\b(?:api|service|feature|support|package|sdk|method|property|option|endpoint)\b.{0,100}\bwill be removed)'
+    }
+    if (-not $openApiAnnotationLeak -and
+        ($headline -match 'deprecat|retirement|非推奨|廃止|obsolete.{0,80}\b(?:api|sdk|apphost|addcsharpapp|workflowagent|method|property|option|endpoint)\b' -or
+            $deprecationBody)) {
         return '非推奨/廃止'
     }
     $gaBody = Test-AffirmativeBodyMatch -Text $bodyText -SignalPattern '\b(?:is|are)\s+now\s+generally available|has reached ga\b'

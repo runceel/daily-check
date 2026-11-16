@@ -111,6 +111,13 @@ Describe 'important change classification' {
         $result | Should BeNullOrEmpty
     }
 
+    It 'does not classify OpenAPI property Obsolete annotations as a product deprecation' {
+        $title = "Don't leak property-level [Obsolete] into shared OpenAPI component schemas"
+        $body = "An [Obsolete] property marks the shared OpenAPI component as deprecated, so other uses look deprecated too."
+        $result = Get-ChangeImportance -Title $title -Body $body -Labels @()
+        $result | Should BeNullOrEmpty
+    }
+
     It 'does not classify retiring runtime resources as a deprecated API' {
         $body = 'Removed-root caches/watchers are retired while the workspace is rediscovered.'
         $result = Get-ChangeImportance -Title 'Show AppHosts from every VS Code workspace root' -Body $body -Labels @()
